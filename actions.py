@@ -788,8 +788,125 @@ def take_note(text: str = "") -> dict:
         return {"status": "error", "error": str(e)}
 
 
-# tool registry the voice agent imports
+# ---------------------------------------------------------------------------
+# The 5 primitives — these are the only tools exposed to the model.
+# The recipe functions above become their implementation layer.
+# The model composes these based on capabilities retrieved per-turn.
+# ---------------------------------------------------------------------------
+
+def primitive_run_applescript(script: str) -> dict:
+    """Execute arbitrary AppleScript. Use for any app that has a scripting
+    dictionary (Spotify, Notes, Finder, Terminal, System Events, etc.)."""
+    if not script or not script.strip():
+        return {"status": "error", "error": "script must not be empty"}
+    p = _osa(script.strip())
+    ok = p.returncode == 0
+    out = (p.stdout or "").strip()
+    err = (p.stderr or "").strip()
+    return {
+        "status": "ok" if ok else "error",
+        "output": out or None,
+        "error": err[:300] if not ok else None,
+    }
+
+
+def primitive_press_key(combo: str, app: str, repeat: int = 1) -> dict:
+    """Send a keyboard shortcut to a named macOS app via CGEvent.
+    combo examples: 'space', 'cmd+k', 'cmd+shift+z', 'left'.
+    repeat sends the key N times (for frame-stepping etc.)."""
+    if not combo:
+        return {"status": "error", "error": "combo must not be empty"}
+    if not app:
+        return {"status": "error", "error": "app name required"}
+    # find running process (version-agnostic name match)
+    p = _osa(
+        f'tell application "System Events" to get name of '
+        f'(first process whose name contains "{app}")'
+    )
+    proc = (p.stdout or "").strip()
+    if not proc:
+        return {"status": "error", "error": f"'{app}' is not running"}
+    _osa(f'tell application "{proc}" to activate')
+    time.sleep(0.25)
+    n = max(1, min(int(repeat), 240))
+    for _ in range(n):
+        result = _ad(["press", "--app", proc, combo])
+        time.sleep(0.03)
+    ok = result.get("ok", True)  # agent-desktop returns ok on success
+    return {
+        "status": "ok" if ok else "error",
+        "app": proc,
+        "combo": combo,
+        "repeat": n,
+    }
+
+
+def primitive_read_screen(app: str = "Terminal") -> dict:
+    """Read the text currently visible in a macOS app via the accessibility
+    tree. Returns the last ~800 chars of visible text so the model can
+    summarise or speak it."""
+    _ad(["launch", app])
+    time.sleep(0.4)
+    res = _ad(["snapshot", "--app", app, "--compact"], timeout=25)
+    text = _extract_text(res.get("data", {}))
+    spoken = text[-800:].strip() if text else ""
+    if not spoken:
+        return {"status": "error", "error": f"no readable text found in '{app}'"}
+    return {"status": "ok", "app": app, "text": spoken}
+
+
+def primitive_open_url(url: str) -> dict:
+    """Open a URL in the configured browser. Use for web searches, docs,
+    any http/https URL. Construct Google search URLs as:
+    https://www.google.com/search?q=<url-encoded-query>"""
+    if not url or not url.startswith(("http://", "https://", "spotify:", "x-apple")):
+        return {"status": "error", "error": f"invalid or unsupported URL scheme: {url!r}"}
+    browser = WEB_BROWSER
+    script = (
+        f'tell application "{browser}" to tell front window '
+        f'to make new tab with properties {{URL:"{url}"}}'
+    )
+    p = _osa(script)
+    if p.returncode != 0:
+        _run(["open", "-a", browser, url])
+    _osa(f'tell application "{browser}" to activate')
+    return {"status": "ok", "url": url, "browser": browser}
+
+
+def primitive_obs_call(request_type: str, request_data: dict | None = None) -> dict:
+    """Send a request to the OBS WebSocket API.
+    Common request_types: StartRecord, StopRecord, GetSceneList,
+    SetCurrentProgramScene (requestData: {sceneName: "..."}).
+    OBS must be running with WebSocket server enabled (Tools → WebSocket Server)."""
+    _ensure_obs()
+    try:
+        results = _obs_call([(request_type, request_data or {})])
+        status = results[0].get("requestStatus", {})
+        ok = status.get("result", False)
+        # code 500 = already in that state (e.g. already recording) — treat as ok
+        if not ok and status.get("code") == 500:
+            ok = True
+        return {
+            "status": "ok" if ok else "error",
+            "requestType": request_type,
+            "response": results[0].get("responseData"),
+            "error": None if ok else status.get("comment", "OBS request failed"),
+        }
+    except Exception as e:  # noqa: BLE001
+        return {"status": "error", "error": str(e)}
+
+
+# tool registry — 5 primitives exposed to the model
 TOOLS = {
+    "run_applescript": primitive_run_applescript,
+    "press_key": primitive_press_key,
+    "read_screen": primitive_read_screen,
+    "open_url": primitive_open_url,
+    "obs_call": primitive_obs_call,
+}
+
+# Legacy registry — used by the standalone CLI tester only
+_LEGACY_TOOLS = {
     "open_app": open_app,
     "web_search": web_search,
     "click_link": click_link,
@@ -809,11 +926,13 @@ TOOLS = {
 # CLI for standalone testing (no OpenAI needed)
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    if len(sys.argv) < 2 or sys.argv[1] not in TOOLS:
+    _all = {**TOOLS, **_LEGACY_TOOLS}
+    if len(sys.argv) < 2 or sys.argv[1] not in _all:
         print("usage: python actions.py <tool> [args...]")
-        print("tools:", ", ".join(TOOLS))
+        print("primitives:", ", ".join(TOOLS))
+        print("recipes:   ", ", ".join(_LEGACY_TOOLS))
         sys.exit(1)
-    fn = TOOLS[sys.argv[1]]
+    fn = _all[sys.argv[1]]
     kwargs = {}
     rest = sys.argv[2:]
     if rest:
