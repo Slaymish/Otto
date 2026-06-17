@@ -169,30 +169,43 @@ APP_ALIASES = {
 
 
 def open_app(name: str) -> dict:
-    """Launch or focus a macOS app by name and bring it to the FRONT (above
-    whatever's currently active, e.g. Premiere)."""
+    """Launch or focus a macOS app by name and bring it to the FRONT."""
     name = APP_ALIASES.get((name or "").strip().lower(), name)
-    res = _ad(["launch", name])
-    ok = bool(res.get("ok"))
-    # force it to the foreground — agent-desktop launches/focuses but the current
-    # frontmost app can stay on top; `activate` + `open -a` make it the main app.
+    _ad(["launch", name])  # best-effort via agent-desktop
+    # `activate` + `open -a` are the reliable foreground path; we use both
+    # because agent-desktop alone sometimes leaves the current app on top.
     _osa(f'tell application "{name}" to activate')
-    _run(["open", "-a", name])
-    return {
-        "status": "ok" if ok else "error",
-        "app": name,
-        "title": res.get("data", {}).get("title"),
-        "detail": None if ok else res,
-    }
+    p = _run(["open", "-a", name])
+    ok = p.returncode == 0
+    if not ok:
+        return {
+            "status": "error",
+            "error": f"Could not open '{name}' — app may not be installed or the name is wrong.",
+            "app": name,
+        }
+    return {"status": "ok", "app": name}
 
 
-# Pre-programmed exact tracks: if the spoken query contains one of these phrases,
-# play that EXACT Spotify track (reliable on camera). Add your own:
-#   "phrase" : "spotify:track:<id>"   (grab the id from the song's Spotify URL)
-FAVORITES = {
-    "herbie hancock": "spotify:track:38xcUjiTP1ivfb7ObwjyGA",  # Watermelon Man (Remastered 2007, Takin' Off)
-    "watermelon man": "spotify:track:38xcUjiTP1ivfb7ObwjyGA",
-}
+def _load_favorites() -> dict:
+    """Load Spotify favorites from VOICEOS_SPOTIFY_FAVORITES JSON file.
+    Returns empty dict if unset or file is missing/malformed."""
+    path = config.SPOTIFY_FAVORITES_FILE
+    if not path:
+        return {}
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {}
+        return {k.lower(): v for k, v in data.items()}
+    except FileNotFoundError:
+        return {}
+    except Exception as e:  # noqa: BLE001
+        print(f"[voice-os] warning: could not load favorites from {path}: {e}", flush=True)
+        return {}
+
+
+FAVORITES: dict = _load_favorites()
 
 
 def play_music(query: str = "") -> dict:
@@ -247,11 +260,14 @@ def play_music(query: str = "") -> dict:
 def run_terminal(prompt: str) -> dict:
     """
     Open Terminal and start a Claude Code session with `prompt` as the request.
-    Used for the 'ask Claude to write me a better intro' beat. Types the command
-    and presses Return so it runs live on camera.
+    Types the command and presses Return so it runs live on camera.
     """
+    if not shutil.which("claude"):
+        return {
+            "status": "error",
+            "error": "'claude' CLI not found in PATH. Install it with: npm install -g @anthropic-ai/claude-code",
+        }
     safe = prompt.replace('"', '\\"')
-    # Open Terminal with a new window already cd'd to home, then run claude.
     script = f'''
     tell application "Terminal"
         activate
@@ -286,19 +302,6 @@ def read_screen_aloud(app: str = "Terminal") -> dict:
     }
 
 
-# Claude Desktop is pre-programmed (via its project instructions) to reply with
-# this exact script when asked for a rewrite. We return it as the read-back text
-# (Claude Desktop is Electron — its reply isn't readable via the accessibility
-# tree — so we use the known deterministic output, which matches what's on screen).
-CLAUDE_DESKTOP_RESPONSE = (
-    "This is GPT-Realtime 2 in action.\n\n"
-    "And in this video, I'm going to show you exactly how to build this yourself "
-    "— everything from opening your apps to fully commanding them, just by talking.\n\n"
-    "You'll get a glimpse into the future of a new kind of operating system — one "
-    "you run entirely with your own voice.\n\n"
-    "And the best part? No coding or technical knowledge is required. All it takes "
-    "is a few prompts to Claude Code."
-)
 
 
 def _force_electron_ax(app_name: str = "Claude"):
@@ -341,13 +344,15 @@ def _find_link_by_subtext(data: dict, needle: str):
 
 def _claude_in_project(name: str) -> bool:
     """True if Claude is ALREADY showing the named project (so we can skip the
-    navigation + its visible bounce). The project's instructions/header show on
-    screen when you're inside it."""
+    navigation + its visible bounce). Requires VOICEOS_CLAUDE_PROJECT_HINT to be
+    set to a short unique phrase from the project's system prompt."""
+    hint = config.CLAUDE_PROJECT_HINT.strip().lower()
+    if not hint:
+        return False  # no hint configured — always navigate to be safe
     blob = json.dumps(_claude_snapshot()).lower()
     if '"name": "new chat - claude"' in blob or '"name": "projects - claude"' in blob:
         return False
-    # the project's own instruction text shows in the project view
-    return "you are helping with a youtube script" in blob
+    return hint in blob
 
 
 def _claude_open_project(name: str) -> bool:
@@ -397,30 +402,35 @@ def _claude_all_text() -> list:
 
 
 def _read_claude_response(timeout: float = 25.0) -> str:
-    """Poll Claude's tree until the response finishes, then return its text."""
+    """Poll Claude's accessibility tree until the response finishes.
+
+    Markers used (Claude Desktop Electron accessibility labels):
+      - start:  any text node begins with "Claude responded:"
+      - finish: any text node contains "finished the response"
+    Poll interval starts at 0.5 s and backs off to 1.0 s after 6 polls
+    to reduce the number of expensive full-tree snapshots at the end.
+    """
     deadline = time.time() + timeout
     last = ""
     n = 0
     while time.time() < deadline:
         _force_electron_ax("Claude")
         texts = _claude_all_text()
-        # the app labels the assistant turn as "Claude responded: <text>"
         responded = [t[len("Claude responded:"):].strip()
                      for t in texts if t.startswith("Claude responded:")]
         if responded:
             last = responded[-1]
-        finished = any("finished the response" in t.lower() for t in texts)
-        n += 1
-        if finished and last:
+        if last and any("finished the response" in t.lower() for t in texts):
             _clog(f"read: finished after {n} polls -> {last[:50]!r}")
             return last
-        time.sleep(0.7)
+        n += 1
+        time.sleep(0.5 if n < 6 else 1.0)
     _clog(f"read: TIMED OUT after {n} polls, last={last[:50]!r}")
     return last
 
 
 def ask_claude(question: str = "",
-               project: str = "YouTube Script") -> dict:
+               project: str = "") -> dict:
     """
     Open the YouTube Script project in Claude Desktop, type the question into the
     project's compose box on screen, send it, and read Claude's ACTUAL reply back
@@ -430,6 +440,7 @@ def ask_claude(question: str = "",
     """
     _clog_t0[0] = time.monotonic()
     q = (question or "").strip()
+    project = (project or config.CLAUDE_PROJECT).strip()
     _clog(f"ask_claude START — project={project!r} question={q[:50]!r}")
     open_app("Claude")  # bring Claude Desktop to the front
     time.sleep(1.5)
@@ -461,11 +472,18 @@ def ask_claude(question: str = "",
     _clog("sent; waiting for Claude's reply…")
     reply = _read_claude_response(timeout=22.0)
     _clog(f"ask_claude DONE in {time.monotonic()-_clog_t0[0]:.1f}s  in_project={in_project}")
+    if not reply:
+        return {
+            "status": "error",
+            "error": "Claude did not produce a readable response within the timeout.",
+            "project_opened": in_project,
+            "question": q,
+        }
     return {
         "status": "ok",
         "project_opened": in_project,
         "question": q,
-        "response": reply or CLAUDE_DESKTOP_RESPONSE,
+        "response": reply,
     }
 
 
@@ -710,9 +728,17 @@ def web_search(query: str = "") -> dict:
 
 
 def click_link(position: str = "first") -> dict:
-    """Click a search result in the active Arc tab (e.g. 'click the first link').
+    """Click a search result in the active browser tab.
     Uses JavaScript to jump to the Nth organic Google result (below the AI
     overview) — reliable, unlike clicking the rendered page via accessibility."""
+    _BROWSER = WEB_BROWSER
+    _JS_CAPABLE = {"Arc", "Google Chrome", "Safari", "Microsoft Edge", "Brave Browser"}
+    if _BROWSER not in _JS_CAPABLE:
+        return {
+            "status": "error",
+            "error": f"click_link does not support browser '{_BROWSER}'. "
+                     f"Supported: {sorted(_JS_CAPABLE)}.",
+        }
     idx = {"first": 0, "1": 0, "one": 0, "top": 0,
            "second": 1, "2": 1, "two": 1,
            "third": 2, "3": 2, "three": 2}.get(str(position).lower().strip(), 0)
@@ -722,14 +748,22 @@ def click_link(position: str = "first") -> dict:
         "var a=ls[%d]||ls[0];if(!a)return 'no-result';"
         "window.location.href=a.href;return 'ok:'+a.href;})()" % idx
     )
-    p = _osa(
-        f'tell application "Arc" to tell active tab of front window '
-        f'to execute javascript "{js}"'
-    )
+    if _BROWSER == "Safari":
+        script = (
+            f'tell application "Safari" to do JavaScript "{js}" '
+            f'in current tab of front window'
+        )
+    else:
+        script = (
+            f'tell application "{_BROWSER}" to tell active tab of front window '
+            f'to execute javascript "{js}"'
+        )
+    p = _osa(script)
     out = (p.stdout or "").strip().strip('"')
     if out.startswith("ok:"):
         return {"status": "ok", "opened": out[3:], "position": position}
-    return {"status": "error", "error": out or "no result link found"}
+    err = out or "no result link found — make sure a Google search is open in the browser"
+    return {"status": "error", "error": err}
 
 
 def take_note(text: str = "") -> dict:

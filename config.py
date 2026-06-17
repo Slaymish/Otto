@@ -91,3 +91,22 @@ USER_HINTS: str = os.environ.get("VOICEOS_USER_HINTS", "")
 # ---------------------------------------------------------------------------
 # Exact macOS app name for Adobe Premiere Pro (changes each year).
 PREMIERE_APP: str = os.environ.get("VOICEOS_PREMIERE_APP", "Adobe Premiere Pro")
+
+# ---------------------------------------------------------------------------
+# Spotify favorites (keep personal track URIs in .env, not in source)
+# ---------------------------------------------------------------------------
+# Path to a JSON file mapping spoken phrases to spotify:track:<id> URIs.
+# Format: {"phrase": "spotify:track:ABC123", ...}
+# If unset, only generic search is used.
+SPOTIFY_FAVORITES_FILE: str = os.environ.get("VOICEOS_SPOTIFY_FAVORITES", "")
+
+# ---------------------------------------------------------------------------
+# Claude Desktop project
+# ---------------------------------------------------------------------------
+# The name of the Claude Desktop project ask_claude navigates into.
+CLAUDE_PROJECT: str = os.environ.get("VOICEOS_CLAUDE_PROJECT", "")
+
+# A short unique phrase from the project's system prompt that confirms we're
+# already inside the right project (Claude Desktop accessibility tree check).
+# If unset, the in-project check is skipped and navigation always runs.
+CLAUDE_PROJECT_HINT: str = os.environ.get("VOICEOS_CLAUDE_PROJECT_HINT", "")
