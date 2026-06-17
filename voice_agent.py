@@ -43,6 +43,7 @@ except ImportError:
     sys.exit("Missing deps. Run ./run.sh (installs sounddevice + websockets).")
 
 import actions
+import config
 
 def _arg_value(flag, default=None):
     if flag in sys.argv:
@@ -53,27 +54,24 @@ def _arg_value(flag, default=None):
 
 
 PTT = "--push-to-talk" in sys.argv
-# hold a global key anywhere to talk (e.g. --hotkey right_option). Default key if
-# --hotkey is passed with no value = right_option.
 HOTKEY_NAME = _arg_value("--hotkey", "right_option") if "--hotkey" in sys.argv else None
 HOTKEY_MODE = HOTKEY_NAME is not None
 WAKE_MODE = not (PTT or HOTKEY_MODE)
 
-# choose input device by name substring (e.g. --mic Scarlett or VOICEOS_MIC=Scarlett)
-MIC_NAME = _arg_value("--mic", os.environ.get("VOICEOS_MIC"))
+MIC_NAME = _arg_value("--mic", config.MIC_NAME)
 
-MODEL = "gpt-realtime-2"
-URL = f"wss://api.openai.com/v1/realtime?model={MODEL}"
-SAMPLE_RATE = 24000
-CHANNELS = 1
-BLOCK = 2400
-OUT_BLOCK = 4800
-PRIME_BYTES = SAMPLE_RATE * 2 * 300 // 1000
-EVENT_LOG = "/tmp/voiceos-events.log"
-HUD_FILE = "/tmp/voiceos-hud.json"  # waveform overlay reads {active, level} from here
+MODEL = config.MODEL
+URL = config.URL
+SAMPLE_RATE = config.SAMPLE_RATE
+CHANNELS = config.OUT_CHANNELS
+BLOCK = config.BLOCK
+OUT_BLOCK = config.OUT_BLOCK
+PRIME_BYTES = config.PRIME_BYTES
+EVENT_LOG = config.EVENT_LOG
+HUD_FILE = config.HUD_FILE
 
-VOICE = "marin"
-WAKE_WORD = "hey chat"
+VOICE = config.VOICE
+WAKE_WORD = config.WAKE_WORD
 _EVT_RESPONSE_CREATE = json.dumps({"type": "response.create"})
 # tolerate common Whisper mishears of "hey chat"
 _WAKE_RE = re.compile(
@@ -563,6 +561,28 @@ async def receive(ws):
             _log("ERROR " + json.dumps(ev.get("error", ev)))
 
 
+def _print_banner(mic_name: str) -> None:
+    print("=" * 60)
+    if WAKE_MODE:
+        print(f"  🎙  VOICE OS — WAKE WORD: say \u201c{WAKE_WORD}, \u2026\u201d")
+        print("  e.g. \u201chey chat, open Spotify\u201d   \u00b7   anything without the")
+        print("  wake word is ignored. Ctrl-C to quit.")
+    elif HOTKEY_MODE:
+        print(f"  🎙  VOICE OS — HOLD-TO-TALK: hold [{HOTKEY_NAME}] anywhere")
+        print("  hold the key, speak, release to send. Ctrl-C to quit.")
+    else:
+        print("  🎙  VOICE OS — PUSH-TO-TALK (press ENTER to talk)")
+    print(f"  mic: {mic_name}   \u00b7   brain: {MODEL}   \u00b7   log: {EVENT_LOG}")
+    print("=" * 60, flush=True)
+    if WAKE_MODE:
+        mode_label = "WAKE"
+    elif HOTKEY_MODE:
+        mode_label = "HOTKEY"
+    else:
+        mode_label = "PTT"
+    _log(f"--- start ({mode_label}) ---")
+
+
 def resolve_input_device():
     """Return (index, name) for the chosen mic, or (None, default name)."""
     if MIC_NAME:
@@ -582,20 +602,7 @@ async def main():
         sys.exit("OPENAI_API_KEY not set. Export a valid Realtime-capable key first.")
     headers = {"Authorization": f"Bearer {key}"}
     in_dev, mic_name = resolve_input_device()
-    print("=" * 60)
-    if WAKE_MODE:
-        print(f"  🎙  VOICE OS — WAKE WORD: say “{WAKE_WORD}, …”")
-        print("  e.g. “hey chat, open Spotify”   ·   anything without the")
-        print("  wake word is ignored. Ctrl-C to quit.")
-    elif HOTKEY_MODE:
-        print(f"  🎙  VOICE OS — HOLD-TO-TALK: hold [{HOTKEY_NAME}] anywhere")
-        print("  hold the key, speak, release to send. Ctrl-C to quit.")
-    else:
-        print("  🎙  VOICE OS — PUSH-TO-TALK (press ENTER to talk)")
-    print(f"  mic: {mic_name}   ·   brain: {MODEL}   ·   log: {EVENT_LOG}")
-    print("=" * 60, flush=True)
-    mode_label = "WAKE" if WAKE_MODE else ("HOTKEY" if HOTKEY_MODE else "PTT")
-    _log(f"--- start ({mode_label}) ---")
+    _print_banner(mic_name)
     if HOTKEY_MODE:
         _start_hotkey_listener()
 
@@ -621,14 +628,14 @@ async def main():
                     URL, additional_headers=headers, max_size=None
                 ) as ws:
                     await ws.send(json.dumps(session_config()))
-                    tasks = [asyncio.ensure_future(mic_pump(ws)),
-                             asyncio.ensure_future(receive(ws))]
+                    tasks = [asyncio.create_task(mic_pump(ws)),
+                             asyncio.create_task(receive(ws))]
                     if PTT:
                         print("\n— press ENTER to talk —", flush=True)
-                        tasks.append(asyncio.ensure_future(ptt_console(ws)))
+                        tasks.append(asyncio.create_task(ptt_console(ws)))
                     elif HOTKEY_MODE:
                         print(f"\n— hold [{HOTKEY_NAME}] to talk —", flush=True)
-                        tasks.append(asyncio.ensure_future(hotkey_console(ws)))
+                        tasks.append(asyncio.create_task(hotkey_console(ws)))
                     # reconnect as soon as ANY task ends (e.g. receive() returns
                     # when the 60-min session closes) — don't wait on idle tasks.
                     await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)

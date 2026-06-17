@@ -35,9 +35,11 @@ import subprocess
 import sys
 import time
 
+import config
+
 AGENT_DESKTOP = shutil.which("agent-desktop") or "agent-desktop"
 
-CLAUDE_LOG = "/tmp/voiceos-claude.log"
+CLAUDE_LOG = config.CLAUDE_LOG
 _clog_t0 = [0.0]
 
 
@@ -430,9 +432,8 @@ def ask_claude(question: str = "",
     q = (question or "").strip()
     _clog(f"ask_claude START — project={project!r} question={q[:50]!r}")
     open_app("Claude")  # bring Claude Desktop to the front
-    time.sleep(1.0)
+    time.sleep(1.5)
     _force_electron_ax("Claude")
-    time.sleep(0.5)
     if project and _claude_in_project(project):
         _clog("already in project -> skipping navigation (no bounce)")
         in_project = True
@@ -688,7 +689,7 @@ def _find_button(node, needles) -> str | None:
     return _tree_find(node, needles=list(needles))
 
 
-WEB_BROWSER = "Arc"  # which browser web_search opens in
+WEB_BROWSER = config.WEB_BROWSER
 
 
 def web_search(query: str = "") -> dict:

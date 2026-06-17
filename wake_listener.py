@@ -40,6 +40,7 @@ try:
 except ImportError as e:
     sys.exit(f"Missing dep ({e}). Run: ./run.sh --local  (installs local wake engine).")
 
+import config
 from voice_agent import (
     INSTRUCTIONS,
     MODEL,
@@ -58,29 +59,24 @@ def _arg_value(flag, default=None):
     return default
 
 
-MIC_NAME = _arg_value("--mic", os.environ.get("VOICEOS_MIC"))
-WHISPER_SIZE = os.environ.get("VOICEOS_WHISPER", "base.en")  # base = sturdier than tiny
+MIC_NAME = _arg_value("--mic", config.MIC_NAME)
+WHISPER_SIZE = config.WHISPER_SIZE
 
-CAP_RATE = 16000        # capture/whisper/vad rate
-FRAME_MS = 80           # OWW wants multiples of 80ms
-FRAME = CAP_RATE * FRAME_MS // 1000          # 1280 samples
-SILENCE_TAIL_MS = 450                         # end utterance after this much silence
-MAX_UTTER_MS = 6000
+CAP_RATE = config.CAP_RATE
+FRAME_MS = config.FRAME_MS
+FRAME = config.FRAME
+SILENCE_TAIL_MS = config.SILENCE_TAIL_MS
+MAX_UTTER_MS = config.MAX_UTTER_MS
 
-# OpenWakeWord model to use for wake detection.
-# Built-in options: "hey_jarvis", "hey_mycroft", "alexa"
-# Set VOICEOS_OWW_MODEL env var to override (e.g. path to a custom .tflite).
-OWW_MODEL = os.environ.get("VOICEOS_OWW_MODEL", "hey_jarvis")
-# Activation threshold: higher = fewer false positives, higher miss rate.
-OWW_THRESHOLD = float(os.environ.get("VOICEOS_OWW_THRESHOLD", "0.5"))
-# OWW requires 16kHz 16-bit mono in chunks that are multiples of 80 ms.
-OWW_FRAME_MS = 80
-OWW_FRAME = CAP_RATE * OWW_FRAME_MS // 1000  # 1280 samples
-OUT_RATE = 24000        # gpt-realtime-2 audio output
-OUT_BLOCK = 4800
-PRIME_BYTES = OUT_RATE * 2 * 300 // 1000
-VOICE = "marin"
-EVENT_LOG = "/tmp/voiceos-events.log"
+OWW_MODEL = config.OWW_MODEL
+OWW_THRESHOLD = config.OWW_THRESHOLD
+OWW_FRAME_MS = config.OWW_FRAME_MS
+OWW_FRAME = config.OWW_FRAME
+OUT_RATE = config.OUT_RATE
+OUT_BLOCK = config.OUT_BLOCK
+PRIME_BYTES = config.PRIME_BYTES
+VOICE = config.VOICE
+EVENT_LOG = config.EVENT_LOG
 
 # ---- audio plumbing ----
 cap_q: "queue.Queue[bytes]" = queue.Queue()   # 16k int16 frames from mic
