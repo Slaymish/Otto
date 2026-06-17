@@ -16,6 +16,16 @@ MODEL: str = os.environ.get("VOICEOS_MODEL", "gpt-realtime-2")
 VOICE: str = os.environ.get("VOICEOS_VOICE", "marin")
 URL: str = f"wss://api.openai.com/v1/realtime?model={MODEL}"
 
+# Input transcription model (drives wake-word detection + command parsing).
+# whisper-1 is fast but mishears short wake words; gpt-4o-transcribe and
+# gpt-4o-mini-transcribe are markedly more accurate. Pick the bigger model if
+# the wake word / commands are getting mistranscribed:
+#   VOICEOS_TRANSCRIBE_MODEL=gpt-4o-transcribe        (best accuracy)
+#   VOICEOS_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe   (cheaper, still good)
+#   VOICEOS_TRANSCRIBE_MODEL=whisper-1                (fastest, least accurate)
+TRANSCRIBE_MODEL: str = os.environ.get("VOICEOS_TRANSCRIBE_MODEL", "gpt-4o-transcribe")
+TRANSCRIBE_LANGUAGE: str = os.environ.get("VOICEOS_TRANSCRIBE_LANGUAGE", "en")
+
 # ---------------------------------------------------------------------------
 # Audio — output (shared by both entry points)
 # ---------------------------------------------------------------------------
@@ -43,6 +53,13 @@ MAX_UTTER_MS: int = 6_000       # hard cap on a single utterance
 # Wake word
 # ---------------------------------------------------------------------------
 WAKE_WORD: str = os.environ.get("VOICEOS_WAKE_WORD", "hey chat")
+
+# Biasing hint fed to the transcriber. Seeding the wake word (and any unusual app
+# names you use) measurably cuts mishears of short commands. Set to "" to disable.
+TRANSCRIBE_PROMPT: str = os.environ.get(
+    "VOICEOS_TRANSCRIBE_PROMPT",
+    f'Commands to a Mac voice assistant. They usually start with the wake word "{WAKE_WORD}".',
+)
 
 # OpenWakeWord — built-in options: "hey_jarvis", "hey_mycroft", "alexa"
 # Set to an absolute path to load a custom .onnx / .tflite model.

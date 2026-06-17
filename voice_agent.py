@@ -192,9 +192,14 @@ def is_wake(transcript: str) -> bool:
 
 
 def session_config() -> dict:
+    transcription = {"model": config.TRANSCRIBE_MODEL}
+    if config.TRANSCRIBE_LANGUAGE:
+        transcription["language"] = config.TRANSCRIBE_LANGUAGE
+    if config.TRANSCRIBE_PROMPT:
+        transcription["prompt"] = config.TRANSCRIBE_PROMPT
     audio_in = {
         "format": {"type": "audio/pcm", "rate": SAMPLE_RATE},
-        "transcription": {"model": "whisper-1", "language": "en"},
+        "transcription": transcription,
     }
     if WAKE_MODE:
         # detect + transcribe turns, but DON'T auto-respond — we gate on the wake
@@ -684,7 +689,7 @@ async def main():
                     )
                 )
                 if added:
-                    print(f"💡 learned {added} new capability(s) this session", flush=True)
+                    print(f"💡 learned {added} memory update(s) this session", flush=True)
             except Exception as e:  # noqa: BLE001
                 print(f"[retrospective] failed: {e}", flush=True)
 
