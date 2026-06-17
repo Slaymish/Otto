@@ -49,17 +49,54 @@
     "id": "web-search",
     "description": "Open the browser and search Google for a query",
     "examples": [
-      "search for {query}",
-      "google {query}",
-      "look up {query}",
-      "what is {query}",
-      "find {query} online",
+      "search for something online",
+      "google it",
+      "look that up",
+      "what is machine learning",
+      "find that online",
+      "find florists in Wellington",
+      "find me a plumber",
+      "find restaurants near me",
+      "find coffee shops in Auckland",
       "check the weather",
-      "search the web for {query}",
-      "open the {query} docs"
+      "search the web",
+      "open the Python docs",
+      "look up the price of milk",
+      "look that up in the browser"
     ],
     "primitive": "open_url",
     "template": "https://www.google.com/search?q={query}"
+  },
+  {
+    "id": "click-link-safari",
+    "description": "Click a search result link in Safari — first, second, or third organic Google result",
+    "examples": [
+      "click the first link",
+      "open the first result",
+      "click the top result",
+      "open the first one",
+      "click the second link",
+      "open the second result",
+      "click the third link",
+      "open that first link"
+    ],
+    "primitive": "run_applescript",
+    "template": "tell application \"Safari\"\n  activate\n  do JavaScript \"(function(){var ls=document.querySelectorAll('#rso a:has(h3),#search a:has(h3)');if(!ls.length)ls=document.querySelectorAll('a:has(h3)');var a=ls[{index}]||ls[0];if(a)window.location.href=a.href;})()\" in current tab of front window\nend tell"
+  },
+  {
+    "id": "click-link-chrome",
+    "description": "Click a search result link in Chrome or Arc — first, second, or third organic Google result",
+    "examples": [
+      "click the first link",
+      "open the first result",
+      "click the top result",
+      "open the first one",
+      "click the second link",
+      "open the second result",
+      "click the third link"
+    ],
+    "primitive": "run_applescript",
+    "template": "tell application \"{browser}\" to tell active tab of front window to execute javascript \"(function(){var ls=document.querySelectorAll('#rso a:has(h3),#search a:has(h3)');if(!ls.length)ls=document.querySelectorAll('a:has(h3)');var a=ls[{index}]||ls[0];if(a)window.location.href=a.href;})()\""
   },
   {
     "id": "premiere-cut",
@@ -73,7 +110,7 @@
       "make a cut"
     ],
     "primitive": "press_key",
-    "template": {"combo": "cmd+k", "app": "Adobe Premiere Pro"}
+    "template": { "combo": "cmd+k", "app": "Adobe Premiere Pro" }
   },
   {
     "id": "premiere-cut-all",
@@ -85,7 +122,7 @@
       "split all tracks"
     ],
     "primitive": "press_key",
-    "template": {"combo": "cmd+shift+k", "app": "Adobe Premiere Pro"}
+    "template": { "combo": "cmd+shift+k", "app": "Adobe Premiere Pro" }
   },
   {
     "id": "premiere-play-pause",
@@ -98,7 +135,7 @@
       "play from here"
     ],
     "primitive": "press_key",
-    "template": {"combo": "space", "app": "Adobe Premiere Pro"}
+    "template": { "combo": "space", "app": "Adobe Premiere Pro" }
   },
   {
     "id": "premiere-step-back",
@@ -111,7 +148,11 @@
       "rewind a frame"
     ],
     "primitive": "press_key",
-    "template": {"combo": "left", "app": "Adobe Premiere Pro", "repeat": "{count}"}
+    "template": {
+      "combo": "left",
+      "app": "Adobe Premiere Pro",
+      "repeat": "{count}"
+    }
   },
   {
     "id": "premiere-step-forward",
@@ -124,52 +165,39 @@
       "next frame"
     ],
     "primitive": "press_key",
-    "template": {"combo": "right", "app": "Adobe Premiere Pro", "repeat": "{count}"}
+    "template": {
+      "combo": "right",
+      "app": "Adobe Premiere Pro",
+      "repeat": "{count}"
+    }
   },
   {
     "id": "premiere-undo",
     "description": "Undo the last action in Premiere Pro",
-    "examples": [
-      "undo",
-      "undo that",
-      "go back",
-      "undo the last cut"
-    ],
+    "examples": ["undo", "undo that", "go back", "undo the last cut"],
     "primitive": "press_key",
-    "template": {"combo": "cmd+z", "app": "Adobe Premiere Pro"}
+    "template": { "combo": "cmd+z", "app": "Adobe Premiere Pro" }
   },
   {
     "id": "premiere-save",
     "description": "Save the Premiere Pro project",
-    "examples": [
-      "save the project",
-      "save Premiere",
-      "save my work"
-    ],
+    "examples": ["save the project", "save Premiere", "save my work"],
     "primitive": "press_key",
-    "template": {"combo": "cmd+s", "app": "Adobe Premiere Pro"}
+    "template": { "combo": "cmd+s", "app": "Adobe Premiere Pro" }
   },
   {
     "id": "premiere-mark-in",
     "description": "Set the in-point marker at the playhead in Premiere Pro",
-    "examples": [
-      "mark in",
-      "set in point",
-      "mark the in point here"
-    ],
+    "examples": ["mark in", "set in point", "mark the in point here"],
     "primitive": "press_key",
-    "template": {"combo": "i", "app": "Adobe Premiere Pro"}
+    "template": { "combo": "i", "app": "Adobe Premiere Pro" }
   },
   {
     "id": "premiere-mark-out",
     "description": "Set the out-point marker at the playhead in Premiere Pro",
-    "examples": [
-      "mark out",
-      "set out point",
-      "mark the out point here"
-    ],
+    "examples": ["mark out", "set out point", "mark the out point here"],
     "primitive": "press_key",
-    "template": {"combo": "o", "app": "Adobe Premiere Pro"}
+    "template": { "combo": "o", "app": "Adobe Premiere Pro" }
   },
   {
     "id": "premiere-ripple-delete",
@@ -181,7 +209,7 @@
       "ripple delete this"
     ],
     "primitive": "press_key",
-    "template": {"combo": "shift+delete", "app": "Adobe Premiere Pro"}
+    "template": { "combo": "shift+delete", "app": "Adobe Premiere Pro" }
   },
   {
     "id": "obs-start-recording",
@@ -194,7 +222,7 @@
       "hit record"
     ],
     "primitive": "obs_call",
-    "template": {"requestType": "StartRecord", "requestData": {}}
+    "template": { "requestType": "StartRecord", "requestData": {} }
   },
   {
     "id": "obs-stop-recording",
@@ -206,7 +234,7 @@
       "finish recording"
     ],
     "primitive": "obs_call",
-    "template": {"requestType": "StopRecord", "requestData": {}}
+    "template": { "requestType": "StopRecord", "requestData": {} }
   },
   {
     "id": "obs-switch-scene",
@@ -220,7 +248,10 @@
       "switch to screen only"
     ],
     "primitive": "obs_call",
-    "template": {"requestType": "SetCurrentProgramScene", "requestData": {"sceneName": "{scene}"}}
+    "template": {
+      "requestType": "SetCurrentProgramScene",
+      "requestData": { "sceneName": "{scene}" }
+    }
   },
   {
     "id": "read-screen",
@@ -234,7 +265,7 @@
       "read that back to me"
     ],
     "primitive": "read_screen",
-    "template": {"app": "{app}"}
+    "template": { "app": "{app}" }
   },
   {
     "id": "take-note",

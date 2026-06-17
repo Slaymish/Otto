@@ -166,6 +166,8 @@ class CapabilityIndex:
             self._index = pairs
             if self._verbose:
                 print(f"[retrieval] loaded {len(pairs)} embeddings from cache", flush=True)
+            # Eagerly warm the model so first-command latency is ~0ms not ~7s
+            self._get_model()
             return
 
         # embed all examples
@@ -228,7 +230,7 @@ class CapabilityIndex:
         top = results[0].score
         second = results[1].score if len(results) > 1 else 0.0
         # STRONG: high absolute score OR clear dominance over runner-up
-        if top >= 0.45 or (top >= 0.30 and top >= second * 1.4):
+        if top >= 0.52 or (top >= 0.40 and top >= second * 1.35):
             return "STRONG"
         return "WEAK"
 
