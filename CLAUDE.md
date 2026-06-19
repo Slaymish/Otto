@@ -10,6 +10,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./run.sh --local                # local on-device wake word (OpenWakeWord + faster-whisper, $0 idle)
 ./run.sh --hotkey               # hold Right Control anywhere to talk
 ./run.sh --wake                 # cloud wake word "hey chat" (streams continuously — NOT $0 idle)
+./run.sh --app                  # native SwiftUI command palette (⌥Space to summon; auto-builds first run)
+
+# Build the SwiftUI app (Xcode Command Line Tools only — no full Xcode)
+make app                        # → VoiceOS/build/VoiceOS.app
+make clean                      # remove build output
 
 # Mic selection (any mode)
 VOICEOS_MIC=Scarlett ./run.sh
@@ -28,6 +33,9 @@ pip install -r requirements-dev.txt
 pytest                           # all tests
 pytest tests/test_retrieval.py   # capability retrieval grounding tests (needs embedding model)
 pytest tests/test_retrospective.py  # dreaming logic, pure — no network needed
+pytest tests/test_session_log.py    # JSONL logger write/read cycle, pure
+pytest tests/test_voice_agent.py    # wake-word gate (is_wake), pure
+pytest tests/test_build.py -v       # builds VoiceOS.app via swiftc — slow, run when touching Swift/Makefile
 python tests/test_loop.py "open Spotify"  # live end-to-end (needs OPENAI_API_KEY)
 ```
 
@@ -48,8 +56,10 @@ The model has **no hardcoded routing rules**. It receives retrieved capability t
 
 ### Entry points
 
-- **`src/voice_agent.py`** — cloud modes (PTT / hotkey / wake word "hey chat"). Opens a WebSocket to `wss://api.openai.com/v1/realtime`, streams audio, gates on the wake word regex, injects capability context, and dispatches tool calls to `actions.py`. Reconnects automatically on the 60-min API session cap.
+- **`src/voice_agent.py`** — cloud modes (PTT / hotkey / wake word "hey chat") **and** the SwiftUI back-end (`--ipc`). Opens a WebSocket to `wss://api.openai.com/v1/realtime`, streams audio, gates on the wake word regex, injects capability context, and dispatches tool calls to `actions.py`. Reconnects automatically on the 60-min API session cap. With `--ipc` it also starts an `IPCServer` and broadcasts waveform/transcript/spoken/tool_call events to the Swift UI (and accepts `voice_start`/`voice_stop`/`text_input` from it).
 - **`src/wake_listener.py`** — local `--local` mode. Two-stage pipeline: OpenWakeWord scores every 80ms frame ($0 CPU), then faster-whisper transcribes only post-wake audio. Once the command text is known, it opens a short-lived Realtime WebSocket to execute it. Imports `INSTRUCTIONS`, `MODEL`, `TOOLS`, `dispatch_tool` from `voice_agent.py`.
+- **`src/ipc_server.py`** — asyncio TCP server (localhost, random port) bridging the SwiftUI app and Python. Newline-delimited JSON; the chosen port is printed to stdout as `IPC_PORT=<n>` for the Swift parent to read. See the module docstring for the full message protocol.
+- **`VoiceOS/`** — native SwiftUI command-palette app launched by `./run.sh --app`. `VoiceOSApp.swift` (the `AppDelegate`) spawns `src/voice_agent.py --ipc` as a subprocess, reads `IPC_PORT=` from its stdout, and connects via `PythonBridge.swift`. `HotkeyManager.swift` registers ⌥Space (Carbon `RegisterEventHotKey`) to toggle the palette; `CommandPalette.swift` + `WaveformView.swift` render the UI. Built with `make app` (swiftc + ad-hoc codesign, no full Xcode) or the Xcode project. The app finds the repo via `VOICEOS_PROJECT_ROOT` or by walking up from the bundle, and merges `.env` so it works when launched from Finder.
 
 ### Tools / actions (`src/actions.py`)
 

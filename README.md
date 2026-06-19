@@ -44,6 +44,7 @@ Then talk: _"open Spotify," "play some jazz," "cut here," "what's on my screen?"
 | **Local wake word**            | `./run.sh --local`               | **$0**    | On-device [OpenWakeWord](https://github.com/dscripka/openWakeWord) (`hey jarvis`) + local Whisper. The cloud is only called once the wake word fires. |
 | **Hold-to-talk hotkey**        | `./ptt.sh` / `./run.sh --hotkey` | **$0**    | Hold **Right Control** (or your hotkey) anywhere to talk.                                    |
 | **Cloud wake word "hey chat"** | `./run.sh --wake`                | not $0    | Hands-free, but streams + transcribes audio **continuously**, so it bills while idle.       |
+| **SwiftUI palette app**        | `./run.sh --app`                 | **$0**    | A native macOS command palette. Press **⌥Space** to summon, then type a command or hold the mic button to talk. Auto-builds the app on first run (needs Xcode Command Line Tools). |
 
 Pick a specific mic with `VOICEOS_MIC=Scarlett ./ptt.sh`.
 
@@ -53,6 +54,30 @@ Pick a specific mic with `VOICEOS_MIC=Scarlett ./ptt.sh`.
 > `hey chat` is only available in the cloud `--wake` mode unless you train a
 > custom OpenWakeWord model. Pick a bigger local Whisper for accuracy with
 > `VOICEOS_WHISPER=small.en` (or `distil-large-v3`).
+
+---
+
+## The SwiftUI palette app
+
+`./run.sh --app` launches a native macOS command palette (a borderless floating
+panel, summoned with **⌥Space**) instead of the terminal. Type a command and
+press return, or hold the mic button to talk — the waveform, transcript, and
+spoken result render in the UI.
+
+Under the hood it's the same Python engine: the Swift app spawns
+`src/voice_agent.py --ipc` and talks to it over a localhost TCP socket
+(newline-delimited JSON — see `src/ipc_server.py` for the protocol). The Swift
+side stays a thin front-end; all the brains live in Python.
+
+```bash
+./run.sh --app     # auto-builds VoiceOS.app on first run, then launches it
+make app           # build only → VoiceOS/build/VoiceOS.app
+make clean         # remove the build output
+```
+
+Building needs **Xcode Command Line Tools** only (`xcode-select --install`) —
+no full Xcode required. The `Makefile` compiles the Swift sources with `swiftc`,
+bundles them into `VoiceOS.app`, and ad-hoc code-signs the result.
 
 ---
 
@@ -200,18 +225,28 @@ All tuneable values live in `.env` (copy `.env.example` to get started):
 ```
 voice-os/
 ├── run.sh  ptt.sh  start.sh        entrypoints (run these)
+├── Makefile                        builds the SwiftUI app (make app)
 ├── requirements*.txt  .env.example
 ├── src/                            application code
-│   ├── voice_agent.py              realtime loop — mic ↔ model ↔ tools (cloud modes)
+│   ├── voice_agent.py              realtime loop — mic ↔ model ↔ tools (cloud + --ipc modes)
 │   ├── wake_listener.py            local ($0-idle) wake-word engine: OpenWakeWord + faster-whisper
 │   ├── actions.py                  the 5 primitive tools the model calls
 │   ├── retrieval.py                local capability embedding index + cosine search
 │   ├── retrospective.py            post-session dreaming loop — learns your phrasings
 │   ├── session_log.py              structured per-session JSONL event logger
+│   ├── ipc_server.py               localhost TCP/JSON bridge for the SwiftUI app
 │   ├── config.py                   all tuneable constants, read from env
 │   ├── voice_app.py                safe global-hotkey front-end (Carbon RegisterEventHotKey)
 │   ├── ax_keeper.py                keeps Claude Desktop's accessibility tree on
 │   └── overlay.py                  waveform HUD
+├── VoiceOS/                        native SwiftUI command-palette app (./run.sh --app)
+│   ├── VoiceOS.xcodeproj           open in Xcode, or build with `make app`
+│   └── VoiceOS/                    Swift sources
+│       ├── VoiceOSApp.swift        app delegate — spawns the Python engine, wires the hotkey
+│       ├── CommandPalette.swift    the floating palette view (text field + mic + waveform)
+│       ├── PythonBridge.swift      TCP/JSON client that drives the UI from Python events
+│       ├── HotkeyManager.swift     global ⌥Space summon hotkey (Carbon RegisterEventHotKey)
+│       └── WaveformView.swift      live mic-level waveform
 ├── tests/                          pytest suite (see "Testing" below)
 ├── docs/                           ADD-AN-APP.md and friends
 └── memory/
@@ -232,6 +267,13 @@ pytest                                # runs tests/
   the local embedding model.
 - `tests/test_retrospective.py` — the dreaming loop's learning logic (pairing
   phrasings with tools, the merge that grows existing templates). Pure, no network.
+- `tests/test_session_log.py` — the structured JSONL logger: every event method,
+  the read/write cycle, and graceful handling of malformed files. Pure, no network.
+- `tests/test_voice_agent.py` — the wake-word gate (`is_wake`): standard phrases,
+  NZ-accent mishears of "chat", and false positives that must not fire.
+- `tests/test_build.py` — verifies `make app` produces a valid, runnable
+  `VoiceOS.app` with Command Line Tools only. Slow (invokes `swiftc`); run it
+  explicitly when touching the Makefile or any Swift source: `pytest tests/test_build.py -v`.
 - `tests/test_loop.py` — optional live end-to-end check against the Realtime API
   (needs `OPENAI_API_KEY`): `python tests/test_loop.py "open Spotify"`.
 

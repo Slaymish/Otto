@@ -7,7 +7,7 @@
 #   ./run.sh --local      local on-device wake word (OpenWakeWord) ($0 idle)
 #   ./run.sh --hotkey     hold a global hotkey to talk             ($0 idle)
 #   ./run.sh --wake       cloud wake word "hey chat"   (streams continuously — NOT $0 idle)
-#   ./run.sh --app        launch the SwiftUI palette app (requires Xcode build first)
+#   ./run.sh --app        launch the SwiftUI palette app (auto-builds if needed; needs CLT)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -24,8 +24,8 @@ warn() { echo -e "${YELLOW}⚠${RESET}  $*"; }
 fail() { echo -e "${RED}✗${RESET}  $*" >&2; exit 1; }
 
 # ── graceful Ctrl-C ─────────────────────────────────────────────────────────
-# Note: we use 'python' below (not exec) so this trap can fire on Ctrl-C.
-trap 'echo -e "\n${BOLD}bye.${RESET}"' INT TERM
+APP_PID=""
+trap '[ -n "$APP_PID" ] && kill "$APP_PID" 2>/dev/null; echo -e "\n${BOLD}bye.${RESET}"' INT TERM
 
 # ── 1. Python venv ──────────────────────────────────────────────────────────
 if [ ! -d .venv ]; then
@@ -121,19 +121,38 @@ for arg in "$@"; do
 done
 
 if [[ " $* " == *" --app "* ]]; then
-  APP="$(pwd)/VoiceOS/build/Release/VoiceOS.app"
-  if [ ! -d "$APP" ]; then
-    step "VoiceOS.app not found — building now (requires Xcode)"
-    xcodebuild -project VoiceOS/VoiceOS.xcodeproj \
-               -scheme VoiceOS \
-               -configuration Release \
-               -derivedDataPath VoiceOS/build \
-               build 2>&1 | tail -5 || fail "xcodebuild failed. Open VoiceOS/VoiceOS.xcodeproj in Xcode to diagnose."
-    ok "built VoiceOS.app"
+  # Prefer a local make-built app; fall back to whatever Xcode left in DerivedData.
+  APP=""
+  if [ -d "$(pwd)/VoiceOS/build/VoiceOS.app" ]; then
+    APP="$(pwd)/VoiceOS/build/VoiceOS.app"
+  else
+    for candidate in \
+        "$(pwd)/VoiceOS/build/Build/Products/Release/VoiceOS.app" \
+        "$(pwd)/VoiceOS/build/Build/Products/Debug/VoiceOS.app"; do
+      [ -d "$candidate" ] && APP="$candidate" && break
+    done
   fi
+  if [ -z "$APP" ]; then
+    APP=$(find ~/Library/Developer/Xcode/DerivedData -name "VoiceOS.app" \
+          -path "*/Build/Products/*/VoiceOS.app" \
+          -not -path "*/Index.noindex/*" 2>/dev/null \
+          | while IFS= read -r p; do printf "%s %s\n" "$(stat -f "%m" "$p")" "$p"; done \
+          | sort -rn | head -1 | cut -d' ' -f2-)
+  fi
+  if [ -z "$APP" ] || [ ! -d "$APP" ]; then
+    step "VoiceOS.app not found — building (requires Command Line Tools: xcode-select --install)"
+    make app || fail "Build failed. Run 'xcode-select --install' if swiftc is missing."
+    APP="$(pwd)/VoiceOS/build/VoiceOS.app"
+  fi
+  ok "found app: $APP"
   step "launching SwiftUI palette app"
-  VOICEOS_PROJECT_ROOT="$(pwd)" open "$APP"
+  # Launch the binary directly (not open) so it inherits OPENAI_API_KEY and
+  # VOICEOS_PROJECT_ROOT from this shell; stay in the process group so Ctrl-C
+  # kills both the script and the UI together.
+  VOICEOS_PROJECT_ROOT="$(pwd)" "$APP/Contents/MacOS/VoiceOS" &
+  APP_PID=$!
   echo -e "   ${BOLD}⌥Space${RESET} to summon the palette  ·  type or hold mic button to talk"
+  wait "$APP_PID"
 elif [[ " $* " == *" --local "* ]]; then
   OWW=${VOICEOS_OWW_MODEL:-hey_jarvis}
   step "launching local wake-word engine (\$0 idle — nothing leaves your Mac until you speak the wake word)"

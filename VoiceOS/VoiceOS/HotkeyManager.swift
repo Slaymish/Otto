@@ -39,7 +39,7 @@ final class HotkeyManager {
 
         InstallEventHandler(target, callback, 1, &spec, retained, &handlerRef)
 
-        var hkID = EventHotKeyID(signature: OSType(0x564F5331), id: 1) // 'VOS1'
+        let hkID = EventHotKeyID(signature: OSType(0x564F5331), id: 1) // 'VOS1'
         RegisterEventHotKey(keyCode, modifiers, hkID, target, 0, &hotKeyRef)
     }
 

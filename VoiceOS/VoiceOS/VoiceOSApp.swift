@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var stdoutPipe: Pipe?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        print("[VoiceOS] app started")
         NSApp.setActivationPolicy(.accessory)
 
         paletteController = PaletteController(bridge: bridge)
@@ -41,9 +42,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func launchPython() {
         guard let root = findProjectRoot() else {
-            NSLog("[VoiceOS] Could not locate project root — set VOICEOS_PROJECT_ROOT env var.")
+            print("[VoiceOS] ERROR: could not locate project root — set VOICEOS_PROJECT_ROOT env var.")
             return
         }
+        print("[VoiceOS] project root: \(root.path)")
 
         let venv = root.appendingPathComponent(".venv/bin/python3")
         let fallback = root.appendingPathComponent(".venv/bin/python")
@@ -53,9 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else if FileManager.default.fileExists(atPath: fallback.path) {
             python = fallback
         } else {
-            NSLog("[VoiceOS] No .venv python found at %@", root.path)
+            print("[VoiceOS] ERROR: no .venv python found at \(root.path)")
             return
         }
+        print("[VoiceOS] launching python: \(python.path)")
 
         let script = root.appendingPathComponent("src/voice_agent.py")
         let process = Process()
@@ -63,9 +66,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         process.arguments = [script.path, "--ipc"]
         process.currentDirectoryURL = root
 
-        // Inherit environment so OPENAI_API_KEY etc. are available
+        // Inherit environment; merge .env so OPENAI_API_KEY is available even when
+        // the app is launched via Finder or open(1) which don't inherit shell env vars.
         var env = ProcessInfo.processInfo.environment
         env["PYTHONUNBUFFERED"] = "1"
+        for (key, value) in loadDotEnv(root: root) where env[key] == nil {
+            env[key] = value
+        }
         process.environment = env
 
         let pipe = Pipe()
@@ -83,7 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         process.terminationHandler = { p in
-            NSLog("[VoiceOS] Python exited with code %d", p.terminationStatus)
+            print("[VoiceOS] python exited with code \(p.terminationStatus)")
         }
 
         try? process.run()
@@ -105,5 +112,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         return nil
+    }
+
+    /// Reads KEY=VALUE pairs from <root>/.env; ignores comments and blank lines.
+    /// Quoted values have their surrounding single/double quotes stripped.
+    private func loadDotEnv(root: URL) -> [String: String] {
+        let file = root.appendingPathComponent(".env")
+        guard let raw = try? String(contentsOf: file, encoding: .utf8) else { return [:] }
+        var result: [String: String] = [:]
+        for line in raw.components(separatedBy: "\n") {
+            var s = line.trimmingCharacters(in: .whitespaces)
+            guard !s.isEmpty, !s.hasPrefix("#") else { continue }
+            // Strip optional leading `export `
+            if s.hasPrefix("export ") { s = String(s.dropFirst(7)) }
+            guard let eq = s.firstIndex(of: "=") else { continue }
+            let key = String(s[..<eq]).trimmingCharacters(in: .whitespaces)
+            var val = String(s[s.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
+            // Strip surrounding quotes
+            if (val.hasPrefix("\"") && val.hasSuffix("\"")) ||
+               (val.hasPrefix("'") && val.hasSuffix("'")) {
+                val = String(val.dropFirst().dropLast())
+            }
+            if !key.isEmpty { result[key] = val }
+        }
+        return result
     }
 }
