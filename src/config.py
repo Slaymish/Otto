@@ -90,6 +90,7 @@ _tmp = tempfile.gettempdir()
 EVENT_LOG: str = os.path.join(_tmp, "voiceos-events.log")
 CLAUDE_LOG: str = os.path.join(_tmp, "voiceos-claude.log")
 HUD_FILE: str = os.path.join(_tmp, "voiceos-hud.json")
+IPC_PORT_FILE: str = os.path.join(_tmp, "voiceos-ipc-port")
 
 # ---------------------------------------------------------------------------
 # Browser / external tools

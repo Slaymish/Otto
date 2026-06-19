@@ -7,6 +7,7 @@
 #   ./run.sh --local      local on-device wake word (OpenWakeWord) ($0 idle)
 #   ./run.sh --hotkey     hold a global hotkey to talk             ($0 idle)
 #   ./run.sh --wake       cloud wake word "hey chat"   (streams continuously — NOT $0 idle)
+#   ./run.sh --app        launch the SwiftUI palette app (requires Xcode build first)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -114,12 +115,26 @@ echo ""
 FILTERED_ARGS=()
 for arg in "$@"; do
   case "$arg" in
-    --local|--wake) ;;                       # consumed here, not by the Python process
+    --local|--wake|--app) ;;                 # consumed here, not by the Python process
     *) FILTERED_ARGS+=("$arg") ;;
   esac
 done
 
-if [[ " $* " == *" --local "* ]]; then
+if [[ " $* " == *" --app "* ]]; then
+  APP="$(pwd)/VoiceOS/build/Release/VoiceOS.app"
+  if [ ! -d "$APP" ]; then
+    step "VoiceOS.app not found — building now (requires Xcode)"
+    xcodebuild -project VoiceOS/VoiceOS.xcodeproj \
+               -scheme VoiceOS \
+               -configuration Release \
+               -derivedDataPath VoiceOS/build \
+               build 2>&1 | tail -5 || fail "xcodebuild failed. Open VoiceOS/VoiceOS.xcodeproj in Xcode to diagnose."
+    ok "built VoiceOS.app"
+  fi
+  step "launching SwiftUI palette app"
+  VOICEOS_PROJECT_ROOT="$(pwd)" open "$APP"
+  echo -e "   ${BOLD}⌥Space${RESET} to summon the palette  ·  type or hold mic button to talk"
+elif [[ " $* " == *" --local "* ]]; then
   OWW=${VOICEOS_OWW_MODEL:-hey_jarvis}
   step "launching local wake-word engine (\$0 idle — nothing leaves your Mac until you speak the wake word)"
   echo -e "   Say ${BOLD}\"${OWW//_/ }, …\"${RESET} to trigger a command (set VOICEOS_OWW_MODEL to change)."

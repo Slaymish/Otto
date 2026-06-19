@@ -55,6 +55,7 @@ except ImportError:
 
 _session: "SessionLog | None" = None
 _cap_index: "_retrieval.CapabilityIndex | None" = None
+_ipc: "IPCServer | None" = None
 
 def _arg_value(flag, default=None):
     if flag in sys.argv:
@@ -67,7 +68,8 @@ def _arg_value(flag, default=None):
 PTT = "--push-to-talk" in sys.argv
 HOTKEY_NAME = _arg_value("--hotkey", "right_option") if "--hotkey" in sys.argv else None
 HOTKEY_MODE = HOTKEY_NAME is not None
-WAKE_MODE = not (PTT or HOTKEY_MODE)
+IPC_MODE = "--ipc" in sys.argv
+WAKE_MODE = not (PTT or HOTKEY_MODE or IPC_MODE)
 
 MIC_NAME = _arg_value("--mic", config.MIC_NAME)
 
@@ -295,12 +297,14 @@ def _log(msg: str):
 
 
 def _write_hud(active: bool, level: float):
-    """Publish mic level + listening state for the waveform overlay (overlay.py)."""
+    """Publish mic level + listening state for the waveform overlay and IPC."""
     try:
         with open(HUD_FILE, "w") as f:
             json.dump({"active": bool(active), "level": float(level)}, f)
     except OSError:
         pass
+    if _ipc:
+        _ipc.broadcast({"type": "waveform", "level": round(level, 3), "active": bool(active)})
 
 
 def _frame_level(data: bytes) -> float:
@@ -453,6 +457,52 @@ async def hotkey_console(ws):
             print("⏳ thinking…", flush=True)
 
 
+async def _ipc_voice_start(ws) -> None:
+    """Handle voice_start from Swift UI: open mic, clear buffer, start listening."""
+    global _listening, _speaking
+    if _speaking or _play_buf:
+        await ws.send(json.dumps({"type": "response.cancel"}))
+        _drain_play_queue()
+        _speaking = False
+        print("⏹  interrupted (IPC)", flush=True)
+    _open_mic()
+    await ws.send(json.dumps({"type": "input_audio_buffer.clear"}))
+    _listening = True
+    print("🎙  listening… (IPC voice start)", flush=True)
+
+
+async def _ipc_voice_stop(ws) -> None:
+    """Handle voice_stop from Swift UI: close mic, commit buffer, request response."""
+    global _listening
+    if not _listening:
+        return
+    _close_mic()
+    await asyncio.sleep(0.15)
+    _listening = False
+    _write_hud(False, 0.0)
+    await ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
+    await ws.send(_EVT_RESPONSE_CREATE)
+    print("⏳ thinking… (IPC voice stop)", flush=True)
+
+
+async def _ipc_text_input(ws, text: str) -> None:
+    """Handle text_input from Swift UI: inject capability context + send as user message."""
+    await _inject_capability_context(ws, text)
+    await ws.send(json.dumps({
+        "type": "conversation.item.create",
+        "item": {
+            "type": "message",
+            "role": "user",
+            "content": [{"type": "input_text", "text": text}],
+        },
+    }))
+    await ws.send(_EVT_RESPONSE_CREATE)
+    print(f"\n⌨  TEXT: {text!r}", flush=True)
+    _log(f"TEXT {text!r}")
+    if _session:
+        _session.heard(text)
+
+
 async def _inject_capability_context(ws, transcript: str) -> None:
     """Retrieve relevant capabilities and inject as a system context item
     into the conversation before response.create fires."""
@@ -480,6 +530,8 @@ async def _handle_transcription(ws, ev: dict) -> None:
     heard = (ev.get("transcript") or "").strip()
     if _session:
         _session.heard(heard)
+    if _ipc and heard:
+        _ipc.broadcast({"type": "transcript", "text": heard})
     if WAKE_MODE:
         if is_wake(heard):
             print(f"\n🗣  HEARD (wake ✓): {heard!r}", flush=True)
@@ -519,6 +571,8 @@ async def _handle_tool_call(ws, ev: dict) -> None:
     print(f"✓  {status}" if status == "ok" else f"✗  {status}", flush=True)
     if _session:
         _session.tool_call(name, args, result, exec_time)
+    if _ipc:
+        _ipc.broadcast({"type": "tool_call", "name": name, "ok": status == "ok"})
     await ws.send(json.dumps({
         "type": "conversation.item.create",
         "item": {"type": "function_call_output", "call_id": call_id,
@@ -550,6 +604,8 @@ async def receive(ws):
             print()
             if _session and spoken_text:
                 _session.spoken(spoken_text)
+            if _ipc and spoken_text:
+                _ipc.broadcast({"type": "spoken", "text": spoken_text})
         elif t in ("response.done", "response.output_audio.done"):
             _speaking = False
             if PTT and t == "response.done":
@@ -604,7 +660,7 @@ def resolve_input_device():
 
 
 async def main():
-    global _session, _cap_index
+    global _session, _cap_index, _ipc
     key = os.environ.get("OPENAI_API_KEY")
     if not key:
         sys.exit("OPENAI_API_KEY not set. Export a valid Realtime-capable key first.")
@@ -613,6 +669,19 @@ async def main():
     _print_banner(mic_name)
     if HOTKEY_MODE:
         _start_hotkey_listener()
+
+    if IPC_MODE:
+        from ipc_server import IPCServer
+        _ipc = IPCServer()
+        await _ipc.start()
+        # Write port to file as secondary discovery path for Swift
+        try:
+            import socket as _socket
+            port = _ipc._server.sockets[0].getsockname()[1]
+            with open(config.IPC_PORT_FILE, "w") as _f:
+                _f.write(str(port))
+        except Exception:  # noqa: BLE001
+            pass
 
     if _MEMORY_ENABLED:
         _session = SessionLog(user=config.USER_NAME)
@@ -644,6 +713,12 @@ async def main():
                     URL, additional_headers=headers, max_size=None
                 ) as ws:
                     await ws.send(json.dumps(session_config()))
+                    if IPC_MODE and _ipc:
+                        _ipc.on_voice_start = lambda: asyncio.create_task(_ipc_voice_start(ws))
+                        _ipc.on_voice_stop = lambda: asyncio.create_task(_ipc_voice_stop(ws))
+                        _ipc.on_text_input = lambda text: asyncio.create_task(_ipc_text_input(ws, text))
+                        _ipc.broadcast({"type": "ready"})
+                        print("\n— SwiftUI palette connected —", flush=True)
                     tasks = [asyncio.create_task(mic_pump(ws)),
                              asyncio.create_task(receive(ws))]
                     if PTT:
