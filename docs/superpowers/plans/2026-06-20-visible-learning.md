@@ -22,6 +22,19 @@
 
 ---
 
+## Lessons applied from the Alphero personalisation spike
+
+The spike's core finding: **keep the model out of the latency-critical path and prefer deterministic code; use the model only for the part code genuinely can't do, run it in parallel, and never block on it (fail-safe to a default).** Moving the model out of the page-build path took render time from 9–16s to ~1.2s. Applied here:
+
+- **Deterministic first.** The decision to learn is already pure code (weak grounding + success). We extend this: when a novel command's top retrieval match is a *near miss* (score in `[NEAR_FLOOR, STRONG_FLOOR)`, i.e. plausibly the same intent), we attach the new phrasing to that capability **with no model call at all** — instant and free. The model is reserved for the one thing code can't do well: minting a brand-new capability (judgment + generalisation).
+- **Fast-fail, never block.** The model-mint path runs off the turn path in an executor with a **short 8s timeout** (vs the 30s batch timeout); on timeout/error it silently yields nothing. A voice command never waits on learning.
+- **Parallel-safe.** Several novel commands can land in quick succession, so learner runs are **serialised behind a lock** — concurrent writes can't corrupt `capabilities.user.json` / the journal.
+- **Measure it.** The learner logs its latency and which path ran (deterministic vs model), mirroring the spike's per-phase latency discipline.
+
+These shape Tasks 6 (deterministic path + timeout), 8 (`near_miss_id` from retrieval), and 9 (lock + latency log).
+
+---
+
 ## File Structure
 
 **New (Python):**
@@ -842,10 +855,11 @@ git commit -m "refactor: extract call_model/propose_updates; route caps through 
 - Test: `tests/test_incremental_learner.py`
 
 **Interfaces:**
-- Consumes: `retrospective.propose_updates`, `learning_store.apply_updates`, `learning_store.LearningEvent`.
+- Consumes: `retrospective.propose_updates`, `retrospective.call_model`, `retrospective._strip_wake`, `learning_store.apply_updates`, `learning_store.LearningEvent`.
 - Produces:
-  - `learn_turn(turn: dict, existing_view: list[dict], *, propose=retrospective.propose_updates) -> list[learning_store.LearningEvent]` — wraps the single turn in a list, proposes updates, applies them, returns events. Never raises (returns `[]` on any failure).
+  - `learn_turn(turn: dict, existing_view: list[dict], *, near_miss_id: str | None = None, propose=None) -> list[learning_store.LearningEvent]` — **deterministic fast path:** when `near_miss_id` is set, attach the turn's (wake-stripped) phrase to that capability with **no model call**. Otherwise ask the model to mint a new capability, off-path with an 8s timeout. Never raises (returns `[]` on any failure). `propose` is injectable for tests; when `None`, uses `retrospective.propose_updates` with a short-timeout `call`.
   - `turn` shape: `{"query": str|None, "name": str, "args": dict, "result": dict}`.
+  - `_MODEL_TIMEOUT_S: int = 8` — module constant (interactive: fail fast).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -885,6 +899,23 @@ def test_learn_turn_creates_capability_from_weak_turn(tmp_path, monkeypatch):
     assert any(c["id"] == "edit-setup" for c in ls.load_user_caps())
 
 
+def test_learn_turn_near_miss_adds_phrasing_without_model(tmp_path, monkeypatch):
+    _point(monkeypatch, tmp_path)
+    ls.save_user_caps([{"id": "thing", "description": "d", "examples": ["foo"],
+                        "primitive": "open_url", "template": "t", "source": "learned"}])
+
+    def boom(turns, existing, **kw):
+        raise AssertionError("model must NOT be called on a near miss")
+
+    # query carries a wake word — it must be stripped before storing the phrasing
+    turn = {"query": "hey chat, do the thing", "name": "open_url",
+            "args": {}, "result": {"status": "ok"}}
+    events = il.learn_turn(turn, [], near_miss_id="thing", propose=boom)
+    assert len(events) == 1 and events[0].action == "added_phrasing"
+    cap = next(c for c in ls.load_user_caps() if c["id"] == "thing")
+    assert "do the thing" in cap["examples"]
+
+
 def test_learn_turn_returns_empty_when_model_raises(tmp_path, monkeypatch):
     _point(monkeypatch, tmp_path)
 
@@ -918,21 +949,44 @@ incremental_learner.py — learn from a single command the moment it succeeds.
 
 When a tool call succeeds on a WEAKLY-grounded turn (the model improvised
 something not already covered), this turns that one turn into a learned
-capability immediately, using the same proposal logic as the batch
-retrospective. Best-effort: any failure returns [] and is swallowed by the
-caller, which runs this off the audio/turn path.
+capability immediately.
+
+Following the Alphero spike lesson — keep the model out of the latency path —
+there are two routes:
+  • Deterministic (no model): if the turn's top retrieval match was a NEAR MISS
+    (same intent, just new phrasing), attach the phrasing to it directly.
+  • Model (only when truly novel): mint a brand-new capability, off the turn
+    path, with a short timeout so it fails fast and never blocks the experience.
+
+Best-effort throughout: any failure returns [] and is swallowed by the caller.
 """
 from __future__ import annotations
 
 import retrospective
 import learning_store
 
+_MODEL_TIMEOUT_S = 8  # interactive: fail fast, never block the experience
+
 
 def learn_turn(turn: dict, existing_view: list[dict], *,
-               propose=retrospective.propose_updates) -> list[learning_store.LearningEvent]:
+               near_miss_id: "str | None" = None,
+               propose=None) -> list[learning_store.LearningEvent]:
     """Learn from one (query, tool_call) turn. Returns LearningEvents (possibly empty)."""
+    phrase = retrospective._strip_wake((turn.get("query") or "")).strip()
+
+    # Deterministic fast path: a near-miss existing capability → just add the phrasing.
+    if near_miss_id and phrase:
+        try:
+            return learning_store.apply_updates([{"id": near_miss_id, "examples": [phrase]}])
+        except Exception:  # noqa: BLE001
+            return []
+
+    # Otherwise ask the model to mint a new capability — off-path, fail-fast.
+    proposer = propose or (lambda turns, existing: retrospective.propose_updates(
+        turns, existing,
+        call=lambda p, **k: retrospective.call_model(p, timeout=_MODEL_TIMEOUT_S)))
     try:
-        updates = propose([turn], existing_view)
+        updates = proposer([turn], existing_view)
     except Exception:  # noqa: BLE001 — learning is best-effort
         return []
     if not updates:
@@ -1023,19 +1077,82 @@ git commit -m "feat: retrospective CLI --journal and --undo"
 
 ---
 
-## Task 8: voice_agent — pure novelty helpers + capture per-turn grounding
+## Task 8: retrieval near-miss helper + voice_agent novelty helpers / per-turn capture
 
 **Files:**
+- Modify: `src/retrieval.py` (threshold constants + `near_miss_id`)
 - Modify: `src/voice_agent.py` (add `_last_turn` global + helpers; set it in `_inject_capability_context`; pass `capability_id` in `_handle_tool_call`)
-- Test: `tests/test_voice_agent.py` (add pure-helper tests)
+- Test: `tests/test_retrieval.py` (pure `near_miss_id` test), `tests/test_voice_agent.py` (pure-helper tests)
 
 **Interfaces:**
-- Produces (module-level, pure, importable):
+- Produces on `retrieval`:
+  - module constants `_STRONG_FLOOR = 0.52`, `_NEAR_FLOOR = 0.40`, `_DOMINANCE = 1.35` (replace the magic numbers in `grounding`).
+  - `CapabilityIndex.near_miss_id(results: list[SearchResult]) -> str | None` — the top capability when its score is in `[_NEAR_FLOOR, _STRONG_FLOOR)` (a plausible same-intent match for a WEAK turn); else `None`.
+- Produces on `voice_agent` (module-level, pure, importable):
   - `_should_learn(grounding: str | None, status: str) -> bool` — `True` iff `grounding == "WEAK"` and `status == "ok"`.
   - `_capability_id_for(last_turn: dict | None) -> str | None` — returns `last_turn["top_id"]` when `last_turn["grounding"] == "STRONG"`, else `None`.
-  - `_last_turn: dict | None` — `{"query": str, "grounding": "STRONG"|"WEAK", "top_id": str|None}`, set per turn.
+  - `_last_turn: dict | None` — `{"query": str, "grounding": "STRONG"|"WEAK", "top_id": str|None, "near_miss_id": str|None}`, set per turn.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing retrieval test**
+
+Add to `tests/test_retrieval.py` (pure — constructs `SearchResult`s directly, no embedding model):
+
+```python
+def test_near_miss_id_only_in_band():
+    from retrieval import CapabilityIndex, SearchResult, Capability
+    idx = object.__new__(CapabilityIndex)  # bypass __init__ (no model load)
+    cap = Capability(id="thing", description="d", examples=[],
+                     primitive="open_url", template="t")
+    assert idx.near_miss_id([SearchResult(cap, 0.45, "x")]) == "thing"   # in band
+    assert idx.near_miss_id([SearchResult(cap, 0.60, "x")]) is None       # strong, not a near miss
+    assert idx.near_miss_id([SearchResult(cap, 0.30, "x")]) is None       # too weak
+    assert idx.near_miss_id([]) is None
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pytest tests/test_retrieval.py -k near_miss -v`
+Expected: FAIL (`AttributeError: 'CapabilityIndex' object has no attribute 'near_miss_id'`)
+
+- [ ] **Step 3: Implement the retrieval helper**
+
+In `src/retrieval.py`, add module constants just below `_MODEL_NAME = ...` (~line 37):
+
+```python
+_STRONG_FLOOR = 0.52
+_NEAR_FLOOR = 0.40
+_DOMINANCE = 1.35
+```
+
+Replace the body of `grounding` (the `if top >= 0.52 ...` lines) with the named constants:
+
+```python
+        if top >= _STRONG_FLOOR or (top >= _NEAR_FLOOR and top >= second * _DOMINANCE):
+            return "STRONG"
+        return "WEAK"
+```
+
+Add the `near_miss_id` method to `CapabilityIndex` (next to `grounding`):
+
+```python
+    def near_miss_id(self, results: list[SearchResult]) -> "str | None":
+        """For a WEAK turn, the top capability that is still a plausible same-intent
+        match (score in [_NEAR_FLOOR, _STRONG_FLOOR)). Lets a new phrasing be attached
+        deterministically — no model call. None if too weak to attribute."""
+        if not results:
+            return None
+        top = results[0]
+        if _NEAR_FLOOR <= top.score < _STRONG_FLOOR:
+            return top.capability.id
+        return None
+```
+
+- [ ] **Step 4: Run retrieval tests**
+
+Run: `pytest tests/test_retrieval.py -k near_miss -v`
+Expected: PASS
+
+- [ ] **Step 5: Write the failing voice_agent test**
 
 Add to `tests/test_voice_agent.py`:
 
@@ -1055,12 +1172,12 @@ def test_capability_id_for_only_when_strong():
     assert va._capability_id_for(None) is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 6: Run test to verify it fails**
 
 Run: `pytest tests/test_voice_agent.py -k "should_learn or capability_id_for" -v`
 Expected: FAIL (`AttributeError: module 'voice_agent' has no attribute '_should_learn'`)
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 7: Implement voice_agent helpers + capture**
 
 In `src/voice_agent.py`, near the other module globals (around line 56-58 where `_session`/`_ipc` are declared), add:
 
@@ -1083,7 +1200,7 @@ def _capability_id_for(last_turn: "dict | None") -> "str | None":
     return None
 ```
 
-In `_inject_capability_context`, after computing `results`/`grounding` (right after line 513 `grounding = _cap_index.grounding(results)`), record the turn:
+In `_inject_capability_context`, after computing `results`/`grounding` (right after line 513 `grounding = _cap_index.grounding(results)`), record the turn (including the deterministic near-miss target):
 
 ```python
         global _last_turn
@@ -1091,6 +1208,7 @@ In `_inject_capability_context`, after computing `results`/`grounding` (right af
             "query": transcript,
             "grounding": grounding,
             "top_id": results[0].capability.id if results else None,
+            "near_miss_id": _cap_index.near_miss_id(results),
         }
 ```
 
@@ -1102,16 +1220,16 @@ In `_handle_tool_call`, change the session logging line (line 573) to attach the
                            capability_id=_capability_id_for(_last_turn))
 ```
 
-- [ ] **Step 4: Run tests**
+- [ ] **Step 8: Run tests**
 
-Run: `pytest tests/test_voice_agent.py -v`
+Run: `pytest tests/test_voice_agent.py tests/test_retrieval.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add src/voice_agent.py tests/test_voice_agent.py
-git commit -m "feat: voice_agent captures per-turn grounding + tags tool calls with capability_id"
+git add src/retrieval.py src/voice_agent.py tests/test_retrieval.py tests/test_voice_agent.py
+git commit -m "feat: retrieval near_miss_id + voice_agent per-turn grounding capture"
 ```
 
 ---
@@ -1124,15 +1242,23 @@ git commit -m "feat: voice_agent captures per-turn grounding + tags tool calls w
 
 **Interfaces:**
 - Consumes: `incremental_learner.learn_turn`, `_should_learn`, `_last_turn`, `_cap_index`, `_ipc`, `learning_store.LearningEvent.to_ipc`.
-- Produces: `async def _run_incremental_learner(turn: dict) -> None` — runs `learn_turn` in the default executor (it makes a blocking HTTP call), then broadcasts each `learned` IPC event, prints a terminal nudge, and refreshes the retrieval index.
+- Produces: `_learn_lock: asyncio.Lock` (module-level) and `async def _run_incremental_learner(turn: dict, near_miss_id: str | None) -> None` — runs `learn_turn` in the default executor **under a lock** (so concurrent novel commands can't corrupt the store), logs latency + which path ran, then broadcasts each `learned` IPC event, prints a terminal nudge, and refreshes the retrieval index.
 
-- [ ] **Step 1: Implement the async runner**
+- [ ] **Step 1: Implement the async runner (lock + latency log + deterministic path)**
 
-In `src/voice_agent.py`, add near `_handle_tool_call` (it needs `asyncio`, already imported):
+In `src/voice_agent.py`, add near `_handle_tool_call` (it needs `asyncio`, already imported). Define the lock at module level beside the other globals:
 
 ```python
-async def _run_incremental_learner(turn: dict) -> None:
-    """Learn from one successful, weakly-grounded turn — off the turn path."""
+_learn_lock = asyncio.Lock()  # serialise store writes across concurrent novel commands
+```
+
+```python
+async def _run_incremental_learner(turn: dict, near_miss_id: "str | None") -> None:
+    """Learn from one successful, weakly-grounded turn — off the turn path.
+
+    Spike lesson: never block the experience. The model path (when there is no
+    near miss) fails fast inside learn_turn; here we just serialise writes and
+    measure. A near_miss takes the deterministic path (no model call)."""
     if not _MEMORY_ENABLED or _cap_index is None:
         return
     import incremental_learner
@@ -1141,24 +1267,29 @@ async def _run_incremental_learner(turn: dict) -> None:
         for c in _cap_index._caps
     ]
     loop = asyncio.get_event_loop()
-    try:
-        events = await loop.run_in_executor(
-            None, lambda: incremental_learner.learn_turn(turn, existing))
-    except Exception as e:  # noqa: BLE001
-        _log(f"learn failed: {e}")
-        return
-    if not events:
-        return
-    for ev in events:
-        verb = "Learned" if ev.action == "new_capability" else "Now also"
-        print(f"\n✦  {verb}: {ev.phrase!r}", flush=True)
-        _log(f"LEARNED {ev.action} {ev.id} {ev.phrase!r}")
-        if _ipc:
-            _ipc.broadcast(ev.to_ipc())
-    try:
-        _cap_index.refresh()
-    except Exception:  # noqa: BLE001
-        pass
+    async with _learn_lock:
+        t0 = time.monotonic()
+        try:
+            events = await loop.run_in_executor(
+                None, lambda: incremental_learner.learn_turn(
+                    turn, existing, near_miss_id=near_miss_id))
+        except Exception as e:  # noqa: BLE001
+            _log(f"learn failed: {e}")
+            return
+        path = "deterministic" if near_miss_id else "model"
+        _log(f"learn {path} {time.monotonic()-t0:.2f}s -> {len(events)} event(s)")
+        if not events:
+            return
+        for ev in events:
+            verb = "Learned" if ev.action == "new_capability" else "Now also"
+            print(f"\n✦  {verb}: {ev.phrase!r}", flush=True)
+            _log(f"LEARNED {ev.action} {ev.id} {ev.phrase!r}")
+            if _ipc:
+                _ipc.broadcast(ev.to_ipc())
+        try:
+            _cap_index.refresh()
+        except Exception:  # noqa: BLE001
+            pass
 ```
 
 - [ ] **Step 2: Wire the trigger into `_handle_tool_call`**
@@ -1169,7 +1300,8 @@ In `_handle_tool_call`, after the IPC `tool_call` broadcast (after line 575) and
     if _should_learn(_last_turn.get("grounding") if _last_turn else None, status):
         turn = {"query": (_last_turn or {}).get("query"),
                 "name": name, "args": args, "result": result}
-        asyncio.create_task(_run_incremental_learner(turn))
+        near = (_last_turn or {}).get("near_miss_id")
+        asyncio.create_task(_run_incremental_learner(turn, near))
 ```
 
 - [ ] **Step 3: Verify it imports and the suite is green**
@@ -1839,8 +1971,15 @@ git commit -m "docs: document the capability journal + ignore learning_journal.j
 - Best-effort/async → Task 6 (`learn_turn` swallows errors), Task 9 (executor + create_task). ✓
 - Existing tests stay green → Tasks 5, 8 explicitly re-run them. ✓
 
+**Alphero spike lessons coverage:**
+- Model out of the hot path / deterministic-first → Task 8 (`near_miss_id`), Task 6 (deterministic near-miss add-phrasing, no model call). ✓
+- Fast-fail, never block → Task 6 (`_MODEL_TIMEOUT_S = 8`), Task 9 (executor, non-blocking `create_task`). ✓
+- Parallel-safe → Task 9 (`_learn_lock` serialises store writes). ✓
+- Measure it → Task 9 (logs path + latency). ✓
+- No magic numbers → Task 8 (named `_STRONG_FLOOR`/`_NEAR_FLOOR`/`_DOMINANCE` in retrieval). ✓
+
 **Placeholder scan:** No TBD/TODO; every code step shows complete code. ✓
 
-**Type consistency:** `LearningEvent`/`JournalCard` defined once (Task 2), populated in Task 3/4, serialized in Task 4 (`journal_payload`), decoded in Swift Task 11 with matching keys (`learned_at`, `times_used`, `last_used`). `_should_learn`/`_capability_id_for` names consistent across Tasks 8–9. IPC message `type` strings match between `ipc_server` (Task 10), `journal_payload` (Task 4), `LearningEvent.to_ipc` (Task 2), and Swift decode (Task 11). ✓
+**Type consistency:** `LearningEvent`/`JournalCard` defined once (Task 2), populated in Task 3/4, serialized in Task 4 (`journal_payload`), decoded in Swift Task 11 with matching keys (`learned_at`, `times_used`, `last_used`). `_should_learn`/`_capability_id_for`/`near_miss_id` names consistent across Tasks 6, 8, 9. `learn_turn(turn, existing_view, *, near_miss_id=None, propose=None)` signature matches its call site in Task 9. IPC message `type` strings match between `ipc_server` (Task 10), `journal_payload` (Task 4), `LearningEvent.to_ipc` (Task 2), and Swift decode (Task 11). ✓
 
 **Deviation from spec (noted):** the spec's `LearningEvent` listed `name` + `summary`; this plan uses `description` (the capability's existing field) + `phrase` to avoid redundant data. Internally consistent across all tasks.
