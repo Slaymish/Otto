@@ -281,5 +281,25 @@ def test_successful_tool_calls_returns_empty_when_no_sessions(log_dir):
     assert SessionLog.successful_tool_calls(sessions=5) == []
 
 
+# ---------------------------------------------------------------------------
+# capability_id field
+# ---------------------------------------------------------------------------
+
+def test_tool_call_records_capability_id(log_dir, slog):
+    slog.tool_call("run_applescript", {"script": "x"}, {"status": "ok"}, 0.1,
+                   capability_id="spotify-play-search")
+    events = SessionLog.read_session(slog.path)
+    call = next(e for e in events if e["event"] == "tool_call")
+    assert call["capability_id"] == "spotify-play-search"
+    assert call["ok"] is True
+
+
+def test_tool_call_capability_id_defaults_to_none(log_dir, slog):
+    slog.tool_call("open_url", {"url": "http://x"}, {"status": "ok"}, 0.1)
+    events = SessionLog.read_session(slog.path)
+    call = next(e for e in events if e["event"] == "tool_call")
+    assert call["capability_id"] is None
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

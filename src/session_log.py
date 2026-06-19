@@ -46,7 +46,8 @@ class SessionLog:
     def ignored(self, transcript: str) -> None:
         self._write({"event": "ignored", "transcript": transcript})
 
-    def tool_call(self, name: str, args: dict, result: dict, latency: float) -> None:
+    def tool_call(self, name: str, args: dict, result: dict, latency: float,
+                  capability_id: str | None = None) -> None:
         self._write({
             "event": "tool_call",
             "name": name,
@@ -54,6 +55,7 @@ class SessionLog:
             "result": result,
             "latency_s": round(latency, 3),
             "ok": result.get("status") == "ok",
+            "capability_id": capability_id,
         })
 
     def spoken(self, text: str) -> None:
