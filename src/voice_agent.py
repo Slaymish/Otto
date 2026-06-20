@@ -254,6 +254,7 @@ play_q: "queue.Queue[bytes]" = queue.Queue()
 _play_buf = bytearray()
 _primed = False
 _speaking = False
+_text_input_inflight = False  # True from response.create until response.done/error
 _listening = WAKE_MODE  # wake mode streams always; PTT streams only after Enter
 _in_stream = None       # input stream handle (on-demand in hotkey mode)
 _in_dev = None          # chosen input device index
@@ -483,12 +484,17 @@ async def _ipc_voice_stop(ws) -> None:
     _listening = False
     _write_hud(False, 0.0)
     await ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
-    await ws.send(_EVT_RESPONSE_CREATE)
-    print("⏳ thinking… (IPC voice stop)", flush=True)
+    # response.create is deferred until _handle_transcription runs, so capability
+    # context can be injected from the actual transcript before the model starts.
+    print("⏳ waiting for transcript… (IPC voice stop)", flush=True)
 
 
 async def _ipc_text_input(ws, text: str) -> None:
     """Handle text_input from Swift UI: inject capability context + send as user message."""
+    global _text_input_inflight
+    if _text_input_inflight or _speaking:
+        return
+    _text_input_inflight = True
     await _inject_capability_context(ws, text)
     await ws.send(json.dumps({
         "type": "conversation.item.create",
@@ -570,6 +576,8 @@ async def _handle_transcription(ws, ev: dict) -> None:
         print(f"\n🗣  HEARD: {heard!r}", flush=True)
         _log(f"HEARD {heard!r}")
         await _inject_capability_context(ws, heard)
+        if _ipc:
+            await ws.send(_EVT_RESPONSE_CREATE)
 
 
 async def _run_incremental_learner(turn: dict, near_miss_id: "str | None") -> None:
@@ -648,7 +656,7 @@ async def _handle_tool_call(ws, ev: dict) -> None:
 
 
 async def receive(ws):
-    global _speaking, _listening
+    global _speaking, _listening, _text_input_inflight
     _NOISY = {"response.output_audio.delta", "response.output_audio_transcript.delta"}
     async for raw in ws:
         ev = json.loads(raw)
@@ -674,6 +682,7 @@ async def receive(ws):
                 _ipc.broadcast({"type": "spoken", "text": spoken_text})
         elif t in ("response.done", "response.output_audio.done"):
             _speaking = False
+            _text_input_inflight = False
             if PTT and t == "response.done":
                 print("\n— press ENTER to talk —", flush=True)
         elif t == "conversation.item.input_audio_transcription.completed":
@@ -683,6 +692,7 @@ async def receive(ws):
         elif t == "response.function_call_arguments.done":
             await _handle_tool_call(ws, ev)
         elif t == "error":
+            _text_input_inflight = False
             err = ev.get("error", ev)
             print("\n[realtime error]", json.dumps(err), flush=True)
             _log("ERROR " + json.dumps(err))
