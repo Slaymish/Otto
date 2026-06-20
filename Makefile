@@ -24,10 +24,12 @@ BINARY    := $(APP)/Contents/MacOS/Otto
 PLIST_SRC := Otto/Otto/Info.plist
 PLIST_DST := $(APP)/Contents/Info.plist
 ENTITLE   := Otto/Otto/Otto.entitlements
+ICON_SRC  := Otto/Otto/AppIcon.icns
+ICON_DST  := $(APP)/Contents/Resources/AppIcon.icns
 
 .PHONY: app clean
 
-app: $(BINARY) $(PLIST_DST)
+app: $(BINARY) $(PLIST_DST) $(ICON_DST)
 	codesign --force --sign - --entitlements "$(ENTITLE)" "$(APP)"
 	@echo "✓  $(APP)"
 
@@ -48,7 +50,10 @@ $(PLIST_DST): $(PLIST_SRC) | $(APP)/Contents
 	    -e 's/$$(PRODUCT_NAME)/Otto/g' \
 	    "$<" > "$@"
 
-$(APP)/Contents/MacOS $(APP)/Contents:
+$(ICON_DST): $(ICON_SRC) | $(APP)/Contents/Resources
+	cp "$<" "$@"
+
+$(APP)/Contents/MacOS $(APP)/Contents $(APP)/Contents/Resources:
 	mkdir -p "$@"
 
 clean:
