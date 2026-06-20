@@ -31,8 +31,15 @@ import math
 import os
 import queue
 import re
+import signal
 import sys
 import time
+
+# Ignore SIGPIPE so writes to a closed Swift stdout pipe don't crash the process.
+try:
+    signal.signal(signal.SIGPIPE, signal.SIG_IGN)
+except AttributeError:
+    pass  # Windows
 
 _t_release = 0.0  # monotonic time of last key release, for latency timing
 
@@ -908,3 +915,5 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\nbye.")
+    except BrokenPipeError:
+        pass
