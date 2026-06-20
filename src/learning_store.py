@@ -178,3 +178,95 @@ def undo(cap_id: str) -> bool:
     save_user_caps(list(by_id.values()))
     _append_journal({"event": "undone", "id": cap_id, "ref": last.get("entry_id")})
     return True
+
+
+def usage_stats(sessions: int = 200) -> dict[str, dict]:
+    stats: dict[str, dict] = {}
+    for path in SessionLog.list_sessions(limit=sessions):
+        for ev in SessionLog.read_session(path):
+            if ev.get("event") != "tool_call":
+                continue
+            cid = ev.get("capability_id")
+            if not cid:
+                continue
+            s = stats.setdefault(cid, {"times_used": 0, "ok_used": 0, "last_used": None})
+            s["times_used"] += 1
+            if ev.get("ok"):
+                s["ok_used"] += 1
+            ts = ev.get("t")
+            if ts is not None:
+                iso = datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                if s["last_used"] is None or iso > s["last_used"]:
+                    s["last_used"] = iso
+    return stats
+
+
+def edit_capability(cap_id: str, description: str | None = None,
+                    examples: list[str] | None = None) -> bool:
+    caps = load_user_caps()
+    found = False
+    for c in caps:
+        if c["id"] == cap_id:
+            if description is not None:
+                c["description"] = description
+            if examples is not None:
+                c["examples"] = examples
+            found = True
+    if found:
+        save_user_caps(caps)
+    return found
+
+
+def delete_capability(cap_id: str) -> bool:
+    caps = load_user_caps()
+    kept = [c for c in caps if c["id"] != cap_id]
+    if len(kept) == len(caps):
+        return False
+    save_user_caps(kept)
+    return True
+
+
+def _learned_at_for(cap_id: str) -> str | None:
+    learned_at = None
+    for r in journal_records():
+        if r.get("event") == "learned" and r.get("id") == cap_id:
+            learned_at = r.get("learned_at")
+    return learned_at
+
+
+def build_journal() -> tuple[dict, list[JournalCard]]:
+    builtin = {c["id"]: c for c in _load_json_list(BUILTIN_CAPS_PATH)}
+    user = {c["id"]: c for c in load_user_caps()}
+    active = {**builtin, **user}  # user overrides builtin by id
+    stats = usage_stats()
+
+    cards: list[JournalCard] = []
+    learned_count = 0
+    for cid, cap in active.items():
+        origin = "learned" if cid in user else "shipped"
+        if origin == "learned":
+            learned_count += 1
+        s = stats.get(cid, {"times_used": 0, "ok_used": 0, "last_used": None})
+        times = s["times_used"]
+        success = (s["ok_used"] / times) if times else 1.0
+        tmpl = cap.get("template", "")
+        cards.append(JournalCard(
+            id=cid, description=cap.get("description", ""),
+            examples=list(cap.get("examples", [])),
+            primitive=cap.get("primitive", ""),
+            template=tmpl if isinstance(tmpl, str) else json.dumps(tmpl, ensure_ascii=False),
+            origin=origin, learned_at=_learned_at_for(cid),
+            times_used=times, last_used=s["last_used"],
+            confidence=confidence(times, success),
+        ))
+    total_commands = sum(s["ok_used"] for s in stats.values())
+    cards.sort(key=lambda c: (c.learned_at or "", c.description), reverse=True)
+    header = {"capabilities": len(active), "learned": learned_count,
+              "commands": total_commands}
+    return header, cards
+
+
+def journal_payload() -> dict:
+    header, cards = build_journal()
+    return {"type": "journal", "header": header,
+            "cards": [c.__dict__ for c in cards]}
