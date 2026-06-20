@@ -32,7 +32,8 @@ SOURCES := \
 	Otto/Otto/HotkeyConfig.swift   \
 	Otto/Otto/HotkeyRecorderView.swift \
 	Otto/Otto/UpdateChecker.swift  \
-	Otto/Otto/CapabilityKind.swift
+	Otto/Otto/CapabilityKind.swift \
+	Otto/Otto/OrbView.swift
 
 APP       := Otto/build/Otto.app
 BINARY    := $(APP)/Contents/MacOS/Otto
