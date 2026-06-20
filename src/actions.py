@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-actions.py — the "hands" of the voice OS.
+actions.py — the "hands" of Otto.
 
 Each function here is a single, reliable, high-level intent that maps to one of
 the beats in the GPT-Realtime-2 cold-open script. The voice agent
@@ -35,9 +35,11 @@ import subprocess
 import sys
 import time
 
+import config
+
 AGENT_DESKTOP = shutil.which("agent-desktop") or "agent-desktop"
 
-CLAUDE_LOG = "/tmp/voiceos-claude.log"
+CLAUDE_LOG = config.CLAUDE_LOG
 _clog_t0 = [0.0]
 
 
@@ -73,6 +75,82 @@ def _ad(args: list[str], timeout: int = 20) -> dict:
         return {"ok": False, "raw": (p.stdout or p.stderr)[:500]}
 
 
+def _ax_collect_text(node, acc: list) -> None:
+    """Recursively collect all string values from an accessibility-tree node."""
+    if isinstance(node, dict):
+        for k in ("name", "value", "title", "text"):
+            v = node.get(k)
+            if isinstance(v, str):
+                acc.append(v)
+        for v in node.values():
+            _ax_collect_text(v, acc)
+    elif isinstance(node, list):
+        for v in node:
+            _ax_collect_text(v, acc)
+
+
+def _ax_node_matches(
+    node: dict,
+    allowed_roles,
+    name_lower: str | None,
+    sub_lower: str | None,
+    needles: list[str] | None,
+) -> bool:
+    """Return True if node satisfies all provided match criteria."""
+    if allowed_roles and node.get("role") not in allowed_roles:
+        return False
+    if name_lower and (node.get("name") or "").strip().lower() != name_lower:
+        return False
+    if sub_lower or needles:
+        acc: list[str] = []
+        _ax_collect_text(node, acc)
+        flat = " ".join(acc).lower()
+        if sub_lower and sub_lower not in flat:
+            return False
+        if needles and not any(nd in flat for nd in needles):
+            return False
+    return True
+
+
+def _tree_find(
+    node,
+    *,
+    role: str | None = None,
+    roles: tuple | None = None,
+    name: str | None = None,
+    subtext: str | None = None,
+    needles: list[str] | None = None,
+) -> str | None:
+    """Generic accessibility-tree search. Returns the first matching ref_id.
+
+    Matching rules (all provided must hold):
+      role / roles  — element role (role is shorthand for roles=(role,))
+      name          — element's 'name' attribute == name (exact, case-insensitive)
+      subtext       — subtree text contains subtext (case-insensitive)
+      needles       — any needle string appears in combined name/title/value
+    """
+    if role:
+        allowed_roles: tuple | None = (role,)
+    elif roles:
+        allowed_roles = tuple(roles)
+    else:
+        allowed_roles = None
+    name_lower = name.lower() if name else None
+    sub_lower = subtext.lower() if subtext else None
+
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if isinstance(n, dict):
+            ref = n.get("ref_id")
+            if ref and _ax_node_matches(n, allowed_roles, name_lower, sub_lower, needles):
+                return ref
+            stack.extend(n.values())
+        elif isinstance(n, list):
+            stack.extend(n)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # tools exposed to gpt-realtime-2
 # ---------------------------------------------------------------------------
@@ -83,38 +161,51 @@ APP_ALIASES = {
     "claude": "Claude",
     "chrome": "Google Chrome",
     "google chrome": "Google Chrome",
-    "premiere": "Adobe Premiere Pro 2025",
-    "premiere pro": "Adobe Premiere Pro 2025",
+    "premiere": config.PREMIERE_APP,
+    "premiere pro": config.PREMIERE_APP,
     "obs studio": "OBS",
     "spotify app": "Spotify",
 }
 
 
 def open_app(name: str) -> dict:
-    """Launch or focus a macOS app by name and bring it to the FRONT (above
-    whatever's currently active, e.g. Premiere)."""
+    """Launch or focus a macOS app by name and bring it to the FRONT."""
     name = APP_ALIASES.get((name or "").strip().lower(), name)
-    res = _ad(["launch", name])
-    ok = bool(res.get("ok"))
-    # force it to the foreground — agent-desktop launches/focuses but the current
-    # frontmost app can stay on top; `activate` + `open -a` make it the main app.
+    _ad(["launch", name])  # best-effort via agent-desktop
+    # `activate` + `open -a` are the reliable foreground path; we use both
+    # because agent-desktop alone sometimes leaves the current app on top.
     _osa(f'tell application "{name}" to activate')
-    _run(["open", "-a", name])
-    return {
-        "status": "ok" if ok else "error",
-        "app": name,
-        "title": res.get("data", {}).get("title"),
-        "detail": None if ok else res,
-    }
+    p = _run(["open", "-a", name])
+    ok = p.returncode == 0
+    if not ok:
+        return {
+            "status": "error",
+            "error": f"Could not open '{name}' — app may not be installed or the name is wrong.",
+            "app": name,
+        }
+    return {"status": "ok", "app": name}
 
 
-# Pre-programmed exact tracks: if the spoken query contains one of these phrases,
-# play that EXACT Spotify track (reliable on camera). Add your own:
-#   "phrase" : "spotify:track:<id>"   (grab the id from the song's Spotify URL)
-FAVORITES = {
-    "herbie hancock": "spotify:track:38xcUjiTP1ivfb7ObwjyGA",  # Watermelon Man (Remastered 2007, Takin' Off)
-    "watermelon man": "spotify:track:38xcUjiTP1ivfb7ObwjyGA",
-}
+def _load_favorites() -> dict:
+    """Load Spotify favorites from OTTO_SPOTIFY_FAVORITES JSON file.
+    Returns empty dict if unset or file is missing/malformed."""
+    path = config.SPOTIFY_FAVORITES_FILE
+    if not path:
+        return {}
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {}
+        return {k.lower(): v for k, v in data.items()}
+    except FileNotFoundError:
+        return {}
+    except Exception as e:  # noqa: BLE001
+        print(f"[otto] warning: could not load favorites from {path}: {e}", flush=True)
+        return {}
+
+
+FAVORITES: dict = _load_favorites()
 
 
 def play_music(query: str = "") -> dict:
@@ -169,11 +260,14 @@ def play_music(query: str = "") -> dict:
 def run_terminal(prompt: str) -> dict:
     """
     Open Terminal and start a Claude Code session with `prompt` as the request.
-    Used for the 'ask Claude to write me a better intro' beat. Types the command
-    and presses Return so it runs live on camera.
+    Types the command and presses Return so it runs live on camera.
     """
+    if not shutil.which("claude"):
+        return {
+            "status": "error",
+            "error": "'claude' CLI not found in PATH. Install it with: npm install -g @anthropic-ai/claude-code",
+        }
     safe = prompt.replace('"', '\\"')
-    # Open Terminal with a new window already cd'd to home, then run claude.
     script = f'''
     tell application "Terminal"
         activate
@@ -208,19 +302,6 @@ def read_screen_aloud(app: str = "Terminal") -> dict:
     }
 
 
-# Claude Desktop is pre-programmed (via its project instructions) to reply with
-# this exact script when asked for a rewrite. We return it as the read-back text
-# (Claude Desktop is Electron — its reply isn't readable via the accessibility
-# tree — so we use the known deterministic output, which matches what's on screen).
-CLAUDE_DESKTOP_RESPONSE = (
-    "This is GPT-Realtime 2 in action.\n\n"
-    "And in this video, I'm going to show you exactly how to build this yourself "
-    "— everything from opening your apps to fully commanding them, just by talking.\n\n"
-    "You'll get a glimpse into the future of a new kind of operating system — one "
-    "you run entirely with your own voice.\n\n"
-    "And the best part? No coding or technical knowledge is required. All it takes "
-    "is a few prompts to Claude Code."
-)
 
 
 def _force_electron_ax(app_name: str = "Claude"):
@@ -249,76 +330,29 @@ def _claude_click_exact(name: str) -> bool:
     """Find + click a Claude element whose name == `name` exactly (full snapshot)."""
     data = _claude_snapshot()
     sid = data.get("snapshot_id")
-    target = name.lower()
-    found = {"ref": None}
-
-    def walk(n):
-        if found["ref"]:
-            return
-        if isinstance(n, dict):
-            if n.get("ref_id") and (n.get("name") or "").strip().lower() == target:
-                found["ref"] = n["ref_id"]
-                return
-            for v in n.values():
-                walk(v)
-        elif isinstance(n, list):
-            for v in n:
-                walk(v)
-
-    walk(data)
-    if found["ref"] and sid:
-        _ad(["click", found["ref"], "--snapshot", sid])
+    ref = _tree_find(data, name=name)
+    if ref and sid:
+        _ad(["click", ref, "--snapshot", sid])
         return True
     return False
 
 
 def _find_link_by_subtext(data: dict, needle: str):
-    """Find a Claude project card: a `link` whose SUBTREE text contains needle
-    (project cards have empty names; their title lives in a child statictext)."""
-    needle = needle.lower()
-    found = {"ref": None}
-
-    def subtext(n, acc):
-        if isinstance(n, dict):
-            for k in ("name", "value", "title", "text"):
-                v = n.get(k)
-                if isinstance(v, str):
-                    acc.append(v)
-            for v in n.values():
-                subtext(v, acc)
-        elif isinstance(n, list):
-            for v in n:
-                subtext(v, acc)
-
-    def walk(n):
-        if found["ref"]:
-            return
-        if isinstance(n, dict):
-            if n.get("role") == "link" and n.get("ref_id"):
-                acc = []
-                subtext(n, acc)
-                if any(needle in (t or "").lower() for t in acc):
-                    found["ref"] = n["ref_id"]
-                    return
-            for v in n.values():
-                walk(v)
-        elif isinstance(n, list):
-            for v in n:
-                walk(v)
-
-    walk(data)
-    return found["ref"]
+    """Find a Claude project card: a `link` whose SUBTREE text contains needle."""
+    return _tree_find(data, role="link", subtext=needle)
 
 
 def _claude_in_project(name: str) -> bool:
     """True if Claude is ALREADY showing the named project (so we can skip the
-    navigation + its visible bounce). The project's instructions/header show on
-    screen when you're inside it."""
+    navigation + its visible bounce). Requires OTTO_CLAUDE_PROJECT_HINT to be
+    set to a short unique phrase from the project's system prompt."""
+    hint = config.CLAUDE_PROJECT_HINT.strip().lower()
+    if not hint:
+        return False  # no hint configured — always navigate to be safe
     blob = json.dumps(_claude_snapshot()).lower()
     if '"name": "new chat - claude"' in blob or '"name": "projects - claude"' in blob:
         return False
-    # the project's own instruction text shows in the project view
-    return "you are helping with a youtube script" in blob
+    return hint in blob
 
 
 def _claude_open_project(name: str) -> bool:
@@ -355,71 +389,48 @@ def _claude_focus_compose():
     """Click the compose textfield so keystrokes land in it."""
     data = _claude_snapshot()
     sid = data.get("snapshot_id")
-    found = {"ref": None}
-
-    def walk(n):
-        if found["ref"]:
-            return
-        if isinstance(n, dict):
-            if n.get("role") == "textfield" and n.get("ref_id"):
-                found["ref"] = n["ref_id"]
-                return
-            for v in n.values():
-                walk(v)
-        elif isinstance(n, list):
-            for v in n:
-                walk(v)
-
-    walk(data)
-    if found["ref"] and sid:
-        _ad(["click", found["ref"], "--snapshot", sid])
+    ref = _tree_find(data, role="textfield")
+    if ref and sid:
+        _ad(["click", ref, "--snapshot", sid])
         time.sleep(0.4)
 
 
 def _claude_all_text() -> list:
-    out = []
-
-    def walk(n):
-        if isinstance(n, dict):
-            if n.get("role") in ("statictext", "paragraph"):
-                v = (n.get("name") or n.get("value") or "").strip()
-                if v:
-                    out.append(v)
-            for v in n.values():
-                walk(v)
-        elif isinstance(n, list):
-            for v in n:
-                walk(v)
-
-    walk(_claude_snapshot())
-    return out
+    acc: list[str] = []
+    _ax_collect_text(_claude_snapshot(), acc)
+    return [t.strip() for t in acc if t.strip()]
 
 
 def _read_claude_response(timeout: float = 25.0) -> str:
-    """Poll Claude's tree until the response finishes, then return its text."""
+    """Poll Claude's accessibility tree until the response finishes.
+
+    Markers used (Claude Desktop Electron accessibility labels):
+      - start:  any text node begins with "Claude responded:"
+      - finish: any text node contains "finished the response"
+    Poll interval starts at 0.5 s and backs off to 1.0 s after 6 polls
+    to reduce the number of expensive full-tree snapshots at the end.
+    """
     deadline = time.time() + timeout
     last = ""
     n = 0
     while time.time() < deadline:
         _force_electron_ax("Claude")
         texts = _claude_all_text()
-        # the app labels the assistant turn as "Claude responded: <text>"
         responded = [t[len("Claude responded:"):].strip()
                      for t in texts if t.startswith("Claude responded:")]
         if responded:
             last = responded[-1]
-        finished = any("finished the response" in t.lower() for t in texts)
-        n += 1
-        if finished and last:
+        if last and any("finished the response" in t.lower() for t in texts):
             _clog(f"read: finished after {n} polls -> {last[:50]!r}")
             return last
-        time.sleep(0.7)
+        n += 1
+        time.sleep(0.5 if n < 6 else 1.0)
     _clog(f"read: TIMED OUT after {n} polls, last={last[:50]!r}")
     return last
 
 
 def ask_claude(question: str = "",
-               project: str = "YouTube Script") -> dict:
+               project: str = "") -> dict:
     """
     Open the YouTube Script project in Claude Desktop, type the question into the
     project's compose box on screen, send it, and read Claude's ACTUAL reply back
@@ -429,11 +440,11 @@ def ask_claude(question: str = "",
     """
     _clog_t0[0] = time.monotonic()
     q = (question or "").strip()
+    project = (project or config.CLAUDE_PROJECT).strip()
     _clog(f"ask_claude START — project={project!r} question={q[:50]!r}")
     open_app("Claude")  # bring Claude Desktop to the front
-    time.sleep(1.0)
+    time.sleep(1.5)
     _force_electron_ax("Claude")
-    time.sleep(0.5)
     if project and _claude_in_project(project):
         _clog("already in project -> skipping navigation (no bounce)")
         in_project = True
@@ -457,54 +468,28 @@ def ask_claude(question: str = "",
     safe = q.replace("\\", "").replace('"', '\\"')
     _osa(f'tell application "System Events" to keystroke "{safe}"')
     time.sleep(0.4)
-    _osa("tell application \"System Events\" to key code 36")  # Return = send
+    _osa("tell application \"System Events\" to key code 36")
     _clog("sent; waiting for Claude's reply…")
     reply = _read_claude_response(timeout=22.0)
     _clog(f"ask_claude DONE in {time.monotonic()-_clog_t0[0]:.1f}s  in_project={in_project}")
+    if not reply:
+        return {
+            "status": "error",
+            "error": "Claude did not produce a readable response within the timeout.",
+            "project_opened": in_project,
+            "question": q,
+        }
     return {
         "status": "ok",
         "project_opened": in_project,
         "question": q,
-        "response": reply or CLAUDE_DESKTOP_RESPONSE,
+        "response": reply,
     }
 
 
 def _find_clickable_by_subtext(data, needle, roles=("cell", "row", "button", "link")):
-    """Find an element of `roles` whose SUBTREE text contains needle (the label
-    is often a child statictext with no ref of its own)."""
-    needle = needle.lower()
-    found = {"ref": None}
-
-    def subtext(n, acc):
-        if isinstance(n, dict):
-            for k in ("name", "value", "title", "text"):
-                v = n.get(k)
-                if isinstance(v, str):
-                    acc.append(v)
-            for v in n.values():
-                subtext(v, acc)
-        elif isinstance(n, list):
-            for v in n:
-                subtext(v, acc)
-
-    def walk(n):
-        if found["ref"]:
-            return
-        if isinstance(n, dict):
-            if n.get("role") in roles and n.get("ref_id"):
-                acc = []
-                subtext(n, acc)
-                if any(needle in (t or "").lower() for t in acc):
-                    found["ref"] = n["ref_id"]
-                    return
-            for v in n.values():
-                walk(v)
-        elif isinstance(n, list):
-            for v in n:
-                walk(v)
-
-    walk(data)
-    return found["ref"]
+    """Find an element of `roles` whose SUBTREE text contains needle."""
+    return _tree_find(data, roles=tuple(roles), subtext=needle)
 
 
 # ---- OBS control via its built-in WebSocket (reliable; not tree-dependent) ----
@@ -515,7 +500,8 @@ OBS_WS_CONFIG = os.path.expanduser(
 
 def _obs_password() -> str:
     try:
-        return json.load(open(OBS_WS_CONFIG)).get("server_password", "")
+        with open(OBS_WS_CONFIG) as f:
+            return json.load(f).get("server_password", "")
     except Exception:  # noqa: BLE001
         return ""
 
@@ -583,12 +569,14 @@ def obs_scene(name: str = "YouTube Talking Head") -> dict:
         return {"status": "error", "error": str(e)}
 
 
+_KEY_RAZOR = "cmd+k"  # Premiere: razor/add-edit at playhead
+
 # Premiere actions → key combos. Add a line to teach a new editing command.
 _PREMIERE_KEYS = {
     "pause": "space", "play": "space", "stop": "space", "space": "space",
     "left": "left", "back": "left", "frame_back": "left", "previous": "left",
     "right": "right", "forward": "right", "frame_forward": "right", "next": "right",
-    "cut": "cmd+k", "razor": "cmd+k", "add_edit": "cmd+k",   # razor at playhead
+    "cut": _KEY_RAZOR, "razor": _KEY_RAZOR, "add_edit": _KEY_RAZOR,
     "cut_all_tracks": "cmd+shift+k",
     "undo": "cmd+z", "redo": "cmd+shift+z", "save": "cmd+s",
     "mark_in": "i", "mark_out": "o", "add_marker": "m",
@@ -705,62 +693,29 @@ def stop_obs_recording() -> dict:
 # text extraction helpers for accessibility trees
 # ---------------------------------------------------------------------------
 def _extract_text(node) -> str:
-    out: list[str] = []
-
-    def walk(n):
-        if isinstance(n, dict):
-            for k in ("value", "name", "title", "text"):
-                v = n.get(k)
-                if isinstance(v, str) and v.strip():
-                    out.append(v.strip())
-            for v in n.values():
-                walk(v)
-        elif isinstance(n, list):
-            for v in n:
-                walk(v)
-
-    walk(node)
-    # de-dup consecutive repeats, join
+    acc: list[str] = []
+    _ax_collect_text(node, acc)
+    stripped = [s.strip() for s in acc if s.strip()]
     seen: list[str] = []
-    for s in out:
+    for s in stripped:
         if not seen or seen[-1] != s:
             seen.append(s)
     return "\n".join(seen)
 
 
 def _find_button(node, needles) -> str | None:
-    found = {"ref": None}
-
-    def walk(n):
-        if found["ref"]:
-            return
-        if isinstance(n, dict):
-            name = " ".join(
-                str(n.get(k, "")) for k in ("name", "title", "value")
-            ).lower()
-            if n.get("ref_id") and any(x in name for x in needles):
-                found["ref"] = n["ref_id"]
-                return
-            for v in n.values():
-                walk(v)
-        elif isinstance(n, list):
-            for v in n:
-                walk(v)
-
-    walk(node)
-    return found["ref"]
+    return _tree_find(node, needles=list(needles))
 
 
-WEB_BROWSER = "Arc"  # which browser web_search opens in
+WEB_BROWSER = config.WEB_BROWSER
 
 
 def web_search(query: str = "") -> dict:
-    """Search the web for `query` in a NEW TAB of the EXISTING Arc window (don't
-    spawn a new browser), then bring Arc to the front."""
+    """Search the web for `query` in a NEW TAB of the EXISTING browser window (don't
+    spawn a new window), then bring the browser to the front."""
     from urllib.parse import quote
 
     url = f"https://www.google.com/search?q={quote(query or '')}"
-    # open in the current Arc window as a new tab (reuses Pat's open window/space)
     script = (
         f'tell application "{WEB_BROWSER}" to tell front window '
         f'to make new tab with properties {{URL:"{url}"}}'
@@ -773,9 +728,17 @@ def web_search(query: str = "") -> dict:
 
 
 def click_link(position: str = "first") -> dict:
-    """Click a search result in the active Arc tab (e.g. 'click the first link').
+    """Click a search result in the active browser tab.
     Uses JavaScript to jump to the Nth organic Google result (below the AI
     overview) — reliable, unlike clicking the rendered page via accessibility."""
+    _BROWSER = WEB_BROWSER
+    _JS_CAPABLE = {"Arc", "Google Chrome", "Safari", "Microsoft Edge", "Brave Browser"}
+    if _BROWSER not in _JS_CAPABLE:
+        return {
+            "status": "error",
+            "error": f"click_link does not support browser '{_BROWSER}'. "
+                     f"Supported: {sorted(_JS_CAPABLE)}.",
+        }
     idx = {"first": 0, "1": 0, "one": 0, "top": 0,
            "second": 1, "2": 1, "two": 1,
            "third": 2, "3": 2, "three": 2}.get(str(position).lower().strip(), 0)
@@ -785,14 +748,22 @@ def click_link(position: str = "first") -> dict:
         "var a=ls[%d]||ls[0];if(!a)return 'no-result';"
         "window.location.href=a.href;return 'ok:'+a.href;})()" % idx
     )
-    p = _osa(
-        f'tell application "Arc" to tell active tab of front window '
-        f'to execute javascript "{js}"'
-    )
+    if _BROWSER == "Safari":
+        script = (
+            f'tell application "Safari" to do JavaScript "{js}" '
+            f'in current tab of front window'
+        )
+    else:
+        script = (
+            f'tell application "{_BROWSER}" to tell active tab of front window '
+            f'to execute javascript "{js}"'
+        )
+    p = _osa(script)
     out = (p.stdout or "").strip().strip('"')
     if out.startswith("ok:"):
         return {"status": "ok", "opened": out[3:], "position": position}
-    return {"status": "error", "error": out or "no result link found"}
+    err = out or "no result link found — make sure a Google search is open in the browser"
+    return {"status": "error", "error": err}
 
 
 def take_note(text: str = "") -> dict:
@@ -817,8 +788,125 @@ def take_note(text: str = "") -> dict:
         return {"status": "error", "error": str(e)}
 
 
-# tool registry the voice agent imports
+# ---------------------------------------------------------------------------
+# The 5 primitives — these are the only tools exposed to the model.
+# The recipe functions above become their implementation layer.
+# The model composes these based on capabilities retrieved per-turn.
+# ---------------------------------------------------------------------------
+
+def primitive_run_applescript(script: str) -> dict:
+    """Execute arbitrary AppleScript. Use for any app that has a scripting
+    dictionary (Spotify, Notes, Finder, Terminal, System Events, etc.)."""
+    if not script or not script.strip():
+        return {"status": "error", "error": "script must not be empty"}
+    p = _osa(script.strip())
+    ok = p.returncode == 0
+    out = (p.stdout or "").strip()
+    err = (p.stderr or "").strip()
+    return {
+        "status": "ok" if ok else "error",
+        "output": out or None,
+        "error": err[:300] if not ok else None,
+    }
+
+
+def primitive_press_key(combo: str, app: str, repeat: int = 1) -> dict:
+    """Send a keyboard shortcut to a named macOS app via CGEvent.
+    combo examples: 'space', 'cmd+k', 'cmd+shift+z', 'left'.
+    repeat sends the key N times (for frame-stepping etc.)."""
+    if not combo:
+        return {"status": "error", "error": "combo must not be empty"}
+    if not app:
+        return {"status": "error", "error": "app name required"}
+    # find running process (version-agnostic name match)
+    p = _osa(
+        f'tell application "System Events" to get name of '
+        f'(first process whose name contains "{app}")'
+    )
+    proc = (p.stdout or "").strip()
+    if not proc:
+        return {"status": "error", "error": f"'{app}' is not running"}
+    _osa(f'tell application "{proc}" to activate')
+    time.sleep(0.25)
+    n = max(1, min(int(repeat), 240))
+    for _ in range(n):
+        result = _ad(["press", "--app", proc, combo])
+        time.sleep(0.03)
+    ok = result.get("ok", True)  # agent-desktop returns ok on success
+    return {
+        "status": "ok" if ok else "error",
+        "app": proc,
+        "combo": combo,
+        "repeat": n,
+    }
+
+
+def primitive_read_screen(app: str = "Terminal") -> dict:
+    """Read the text currently visible in a macOS app via the accessibility
+    tree. Returns the last ~800 chars of visible text so the model can
+    summarise or speak it."""
+    _ad(["launch", app])
+    time.sleep(0.4)
+    res = _ad(["snapshot", "--app", app, "--compact"], timeout=25)
+    text = _extract_text(res.get("data", {}))
+    spoken = text[-800:].strip() if text else ""
+    if not spoken:
+        return {"status": "error", "error": f"no readable text found in '{app}'"}
+    return {"status": "ok", "app": app, "text": spoken}
+
+
+def primitive_open_url(url: str) -> dict:
+    """Open a URL in the configured browser. Use for web searches, docs,
+    any http/https URL. Construct Google search URLs as:
+    https://www.google.com/search?q=<url-encoded-query>"""
+    if not url or not url.startswith(("http://", "https://", "spotify:", "x-apple")):
+        return {"status": "error", "error": f"invalid or unsupported URL scheme: {url!r}"}
+    browser = WEB_BROWSER
+    script = (
+        f'tell application "{browser}" to tell front window '
+        f'to make new tab with properties {{URL:"{url}"}}'
+    )
+    p = _osa(script)
+    if p.returncode != 0:
+        _run(["open", "-a", browser, url])
+    _osa(f'tell application "{browser}" to activate')
+    return {"status": "ok", "url": url, "browser": browser}
+
+
+def primitive_obs_call(request_type: str, request_data: dict | None = None) -> dict:
+    """Send a request to the OBS WebSocket API.
+    Common request_types: StartRecord, StopRecord, GetSceneList,
+    SetCurrentProgramScene (requestData: {sceneName: "..."}).
+    OBS must be running with WebSocket server enabled (Tools → WebSocket Server)."""
+    _ensure_obs()
+    try:
+        results = _obs_call([(request_type, request_data or {})])
+        status = results[0].get("requestStatus", {})
+        ok = status.get("result", False)
+        # code 500 = already in that state (e.g. already recording) — treat as ok
+        if not ok and status.get("code") == 500:
+            ok = True
+        return {
+            "status": "ok" if ok else "error",
+            "requestType": request_type,
+            "response": results[0].get("responseData"),
+            "error": None if ok else status.get("comment", "OBS request failed"),
+        }
+    except Exception as e:  # noqa: BLE001
+        return {"status": "error", "error": str(e)}
+
+
+# tool registry — 5 primitives exposed to the model
 TOOLS = {
+    "run_applescript": primitive_run_applescript,
+    "press_key": primitive_press_key,
+    "read_screen": primitive_read_screen,
+    "open_url": primitive_open_url,
+    "obs_call": primitive_obs_call,
+}
+
+# Legacy registry — used by the standalone CLI tester only
+_LEGACY_TOOLS = {
     "open_app": open_app,
     "web_search": web_search,
     "click_link": click_link,
@@ -838,11 +926,13 @@ TOOLS = {
 # CLI for standalone testing (no OpenAI needed)
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    if len(sys.argv) < 2 or sys.argv[1] not in TOOLS:
+    _all = {**TOOLS, **_LEGACY_TOOLS}
+    if len(sys.argv) < 2 or sys.argv[1] not in _all:
         print("usage: python actions.py <tool> [args...]")
-        print("tools:", ", ".join(TOOLS))
+        print("primitives:", ", ".join(TOOLS))
+        print("recipes:   ", ", ".join(_LEGACY_TOOLS))
         sys.exit(1)
-    fn = TOOLS[sys.argv[1]]
+    fn = _all[sys.argv[1]]
     kwargs = {}
     rest = sys.argv[2:]
     if rest:

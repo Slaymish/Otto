@@ -6,7 +6,7 @@ screen while you talk to chat.
 Uses a borderless, transparent, always-on-top NSWindow with
 setIgnoresMouseEvents_(True), so it physically CANNOT intercept clicks or steal
 focus (the earlier tkinter version did — this one can't). Reads
-/tmp/voiceos-hud.json ({active, level}) which voice_agent.py writes.
+/tmp/otto-hud.json ({active, level}) which voice_agent.py writes.
 
 Run:  python overlay.py        (needs pyobjc-framework-Cocoa)
 """
@@ -32,7 +32,7 @@ from AppKit import (
 )
 from Foundation import NSMakeRect
 
-HUD_FILE = "/tmp/voiceos-hud.json"
+HUD_FILE = "/tmp/otto-hud.json"
 W, H = 760, 110
 BARS = 60
 
@@ -139,10 +139,10 @@ def main():
     app = NSApplication.sharedApplication()
     app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
 
-    # Pick which monitor to show the waveform on. VOICEOS_DISPLAY is 1-based
+    # Pick which monitor to show the waveform on. OTTO_DISPLAY is 1-based
     # (1 = primary, 2 = second monitor). Defaults to display 2 if it exists.
     screens = NSScreen.screens()
-    want = int(os.environ.get("VOICEOS_DISPLAY", "2"))
+    want = int(os.environ.get("OTTO_DISPLAY") or os.environ.get("VOICEOS_DISPLAY") or "2")
     idx = want - 1
     if idx < 0 or idx >= len(screens):
         idx = len(screens) - 1  # fall back to the last available screen

@@ -1,11 +1,14 @@
 # Teach your agent a new app
 
-This voice OS can already **open any app** out of the box (just say "open Apple
+Otto can already **open any app** out of the box (just say "open Apple
 Music"). This guide is for when you want it to do something *specific* inside an
 app — "play my Discover Weekly," "skip this track," "start a new note" — for an
 app we didn't pre-build. You're going to add a **tool**. It's ~15 lines, and you
 can even have your coding agent (Claude Code / Cursor) do it for you using the
 steps below.
+
+> The Python modules referenced below (`actions.py`, `voice_agent.py`, …) live in
+> the **`src/`** directory.
 
 ---
 
@@ -197,4 +200,4 @@ focused — a single safe focus-click usually fixes the "works sometimes" proble
 - **Permissions:** agent-desktop needs **Accessibility** permission (System
   Settings → Privacy & Security → Accessibility). Grant it once.
 - **Test a tool without voice:** every tool runs standalone —
-  `python actions.py play_apple_music "miles davis"`.
+  `python src/actions.py play_apple_music "miles davis"`.
