@@ -1,7 +1,7 @@
-# Build VoiceOS.app using only Xcode Command Line Tools (no full Xcode needed).
+# Build Otto.app using only Xcode Command Line Tools (no full Xcode needed).
 # Install CLT:  xcode-select --install
 #
-#   make app     — compile + bundle + sign → VoiceOS/build/VoiceOS.app
+#   make app     — compile + bundle + sign → Otto/build/Otto.app
 #   make clean   — remove build output
 
 ARCH   := $(shell uname -m)
@@ -9,17 +9,17 @@ SDK    := $(shell xcrun --show-sdk-path 2>/dev/null)
 TARGET := $(ARCH)-apple-macos14.0
 
 SOURCES := \
-	VoiceOS/VoiceOS/VoiceOSApp.swift    \
-	VoiceOS/VoiceOS/CommandPalette.swift \
-	VoiceOS/VoiceOS/HotkeyManager.swift  \
-	VoiceOS/VoiceOS/PythonBridge.swift   \
-	VoiceOS/VoiceOS/WaveformView.swift
+	Otto/Otto/OttoApp.swift        \
+	Otto/Otto/CommandPalette.swift \
+	Otto/Otto/HotkeyManager.swift  \
+	Otto/Otto/PythonBridge.swift   \
+	Otto/Otto/WaveformView.swift
 
-APP       := VoiceOS/build/VoiceOS.app
-BINARY    := $(APP)/Contents/MacOS/VoiceOS
-PLIST_SRC := VoiceOS/VoiceOS/Info.plist
+APP       := Otto/build/Otto.app
+BINARY    := $(APP)/Contents/MacOS/Otto
+PLIST_SRC := Otto/Otto/Info.plist
 PLIST_DST := $(APP)/Contents/Info.plist
-ENTITLE   := VoiceOS/VoiceOS/VoiceOS.entitlements
+ENTITLE   := Otto/Otto/Otto.entitlements
 
 .PHONY: app clean
 
@@ -38,13 +38,13 @@ $(BINARY): $(SOURCES) | $(APP)/Contents/MacOS
 # Substitute Xcode build-setting placeholders with literal values.
 $(PLIST_DST): $(PLIST_SRC) | $(APP)/Contents
 	sed \
-	    -e 's/$$(EXECUTABLE_NAME)/VoiceOS/g' \
-	    -e 's/$$(PRODUCT_BUNDLE_IDENTIFIER)/com.voiceos.app/g' \
-	    -e 's/$$(PRODUCT_NAME)/VoiceOS/g' \
+	    -e 's/$$(EXECUTABLE_NAME)/Otto/g' \
+	    -e 's/$$(PRODUCT_BUNDLE_IDENTIFIER)/com.otto.app/g' \
+	    -e 's/$$(PRODUCT_NAME)/Otto/g' \
 	    "$<" > "$@"
 
 $(APP)/Contents/MacOS $(APP)/Contents:
 	mkdir -p "$@"
 
 clean:
-	rm -rf VoiceOS/build/VoiceOS.app
+	rm -rf Otto/build/Otto.app

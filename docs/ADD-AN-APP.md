@@ -1,6 +1,6 @@
 # Teach your agent a new app
 
-This voice OS can already **open any app** out of the box (just say "open Apple
+Otto can already **open any app** out of the box (just say "open Apple
 Music"). This guide is for when you want it to do something *specific* inside an
 app — "play my Discover Weekly," "skip this track," "start a new note" — for an
 app we didn't pre-build. You're going to add a **tool**. It's ~15 lines, and you

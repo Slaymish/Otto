@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AA000002000000000000001A /* VoiceOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000001A /* VoiceOSApp.swift */; };
+		AA000002000000000000001A /* OttoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000001A /* OttoApp.swift */; };
 		AA000002000000000000002B /* CommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000002B /* CommandPalette.swift */; };
 		AA000002000000000000003C /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000003C /* WaveformView.swift */; };
 		AA000002000000000000004D /* PythonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000004D /* PythonBridge.swift */; };
@@ -18,14 +18,14 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		AA000001000000000000001A /* VoiceOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceOSApp.swift; sourceTree = "<group>"; };
+		AA000001000000000000001A /* OttoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttoApp.swift; sourceTree = "<group>"; };
 		AA000001000000000000002B /* CommandPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPalette.swift; sourceTree = "<group>"; };
 		AA000001000000000000003C /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
 		AA000001000000000000004D /* PythonBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonBridge.swift; sourceTree = "<group>"; };
 		AA000001000000000000005E /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		AA000001000000000000006F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		AA000001000000000000007A /* VoiceOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VoiceOS.entitlements; sourceTree = "<group>"; };
-		AA000001000000000000008B /* VoiceOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VoiceOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA000001000000000000007A /* Otto.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Otto.entitlements; sourceTree = "<group>"; };
+		AA000001000000000000008B /* Otto.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Otto.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA00000F000000000000001A /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		AA00000F000000000000002B /* Network.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Network.framework; path = System/Library/Frameworks/Network.framework; sourceTree = SDKROOT; };
 		AA00000F000000000000003C /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
@@ -48,30 +48,30 @@
 		AA000004000000000000001A /* Main */ = {
 			isa = PBXGroup;
 			children = (
-				AA000004000000000000002B /* VoiceOS */,
+				AA000004000000000000002B /* Otto */,
 				AA000004000000000000003C /* Products */,
 				AA000004000000000000004D /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
-		AA000004000000000000002B /* VoiceOS */ = {
+		AA000004000000000000002B /* Otto */ = {
 			isa = PBXGroup;
 			children = (
-				AA000001000000000000001A /* VoiceOSApp.swift */,
+				AA000001000000000000001A /* OttoApp.swift */,
 				AA000001000000000000002B /* CommandPalette.swift */,
 				AA000001000000000000003C /* WaveformView.swift */,
 				AA000001000000000000004D /* PythonBridge.swift */,
 				AA000001000000000000005E /* HotkeyManager.swift */,
 				AA000001000000000000006F /* Info.plist */,
-				AA000001000000000000007A /* VoiceOS.entitlements */,
+				AA000001000000000000007A /* Otto.entitlements */,
 			);
-			path = VoiceOS;
+			path = Otto;
 			sourceTree = "<group>";
 		};
 		AA000004000000000000003C /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				AA000001000000000000008B /* VoiceOS.app */,
+				AA000001000000000000008B /* Otto.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -89,9 +89,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		AA000007000000000000001A /* VoiceOS */ = {
+		AA000007000000000000001A /* Otto */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AA000006000000000000002B /* Build configuration list for PBXNativeTarget "VoiceOS" */;
+			buildConfigurationList = AA000006000000000000002B /* Build configuration list for PBXNativeTarget "Otto" */;
 			buildPhases = (
 				AA000003000000000000001A /* Sources */,
 				AA000003000000000000002B /* Resources */,
@@ -101,9 +101,9 @@
 			);
 			dependencies = (
 			);
-			name = VoiceOS;
-			productName = VoiceOS;
-			productReference = AA000001000000000000008B /* VoiceOS.app */;
+			name = Otto;
+			productName = Otto;
+			productReference = AA000001000000000000008B /* Otto.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -116,7 +116,7 @@
 				LastSwiftUpdateCheck = 1600;
 				LastUpgradeCheck = 1600;
 			};
-			buildConfigurationList = AA000006000000000000001A /* Build configuration list for PBXProject "VoiceOS" */;
+			buildConfigurationList = AA000006000000000000001A /* Build configuration list for PBXProject "Otto" */;
 			compatibilityVersion = "Xcode 15.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -129,7 +129,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				AA000007000000000000001A /* VoiceOS */,
+				AA000007000000000000001A /* Otto */,
 			);
 		};
 /* End PBXProject section */
@@ -149,7 +149,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA000002000000000000001A /* VoiceOSApp.swift in Sources */,
+				AA000002000000000000001A /* OttoApp.swift in Sources */,
 				AA000002000000000000002B /* CommandPalette.swift in Sources */,
 				AA000002000000000000003C /* WaveformView.swift in Sources */,
 				AA000002000000000000004D /* PythonBridge.swift in Sources */,
@@ -276,18 +276,18 @@
 		AA000005000000000000003C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "VoiceOS/VoiceOS.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "Otto/Otto.entitlements";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
-				INFOPLIST_FILE = "VoiceOS/Info.plist";
+				INFOPLIST_FILE = "Otto/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.voiceos.app";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.otto.app";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -297,18 +297,18 @@
 		AA000005000000000000004D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "VoiceOS/VoiceOS.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "Otto/Otto.entitlements";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
-				INFOPLIST_FILE = "VoiceOS/Info.plist";
+				INFOPLIST_FILE = "Otto/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.voiceos.app";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.otto.app";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -318,7 +318,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		AA000006000000000000001A /* Build configuration list for PBXProject "VoiceOS" */ = {
+		AA000006000000000000001A /* Build configuration list for PBXProject "Otto" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AA000005000000000000001A /* Debug */,
@@ -327,7 +327,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		AA000006000000000000002B /* Build configuration list for PBXNativeTarget "VoiceOS" */ = {
+		AA000006000000000000002B /* Build configuration list for PBXNativeTarget "Otto" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AA000005000000000000003C /* Debug */,

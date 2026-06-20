@@ -1,17 +1,21 @@
-# Voice OS — run your Mac with your voice
+# Otto
 
-Talk to your Mac and it actually does things — open apps, play music, control
-Premiere, start a recording, read the screen back. A small, hackable starting
-point you can clone and extend. **It learns your workflows over time.**
+**A personal, native-feeling voice & text assistant for the Mac — one that learns
+your workflows and gets better the more you use it.**
 
-- **Brain:** OpenAI `gpt-realtime-2` (speech-to-speech + tool calling)
-- **Hands:** 5 primitive tools — AppleScript, key presses, screen reading, URL opening, OBS WebSocket
-- **Memory:** local semantic retrieval — capabilities embedded with `sentence-transformers`, searched per-turn, no API cost
-- **Learning:** post-session "dreaming" — the model reflects on what worked and writes new capability templates for next time
+Otto sits quietly in the background. Summon it with a keystroke, say (or type) what
+you want — _"open Spotify," "cut here," "what's on my screen?"_ — and it does the
+thing. No chat, no ceremony. Every session it watches what worked and quietly
+writes that back into its own memory, so the exact way _you_ ask for something
+lands instantly next time. It compounds.
 
-> Built for the "run your entire computer with your voice" video. Clone it, hand
-> it to your coding agent, and say _"build this out for me."_
-> See **[docs/ADD-AN-APP.md](docs/ADD-AN-APP.md)**.
+It's not a demo and it's not a gimmick. It's built to be a daily driver.
+
+- **Brain** — OpenAI `gpt-realtime-2` (speech-to-speech + tool calling)
+- **Hands** — 5 primitive tools: AppleScript, key presses, screen reading, URL opening, OBS WebSocket
+- **Memory** — local semantic retrieval: your capabilities are embedded with `sentence-transformers` and searched on every turn, fully on-device, $0
+- **Learning** — a post-session "dreaming" loop reflects on what worked and writes new capability templates for next time
+- **Surface** — a native SwiftUI command palette (⌥Space), or any of four terminal modes
 
 ---
 
@@ -40,29 +44,28 @@ Then talk: _"open Spotify," "play some jazz," "cut here," "what's on my screen?"
 
 | Mode                           | Command                          | Idle cost | Notes                                                                                       |
 | ------------------------------ | -------------------------------- | --------- | ------------------------------------------------------------------------------------------- |
+| **Native palette app**         | `./run.sh --app`                 | **$0**    | A native macOS command palette. Press **⌥Space** to summon, then type a command or hold the mic button to talk. Auto-builds the app on first run (needs Xcode Command Line Tools). |
 | **Push-to-talk** (default)     | `./run.sh`                       | **$0**    | Press ENTER, talk. Nothing is sent until you press ENTER.                                   |
 | **Local wake word**            | `./run.sh --local`               | **$0**    | On-device [OpenWakeWord](https://github.com/dscripka/openWakeWord) (`hey jarvis`) + local Whisper. The cloud is only called once the wake word fires. |
 | **Hold-to-talk hotkey**        | `./ptt.sh` / `./run.sh --hotkey` | **$0**    | Hold **Right Control** (or your hotkey) anywhere to talk.                                    |
 | **Cloud wake word "hey chat"** | `./run.sh --wake`                | not $0    | Hands-free, but streams + transcribes audio **continuously**, so it bills while idle.       |
-| **SwiftUI palette app**        | `./run.sh --app`                 | **$0**    | A native macOS command palette. Press **⌥Space** to summon, then type a command or hold the mic button to talk. Auto-builds the app on first run (needs Xcode Command Line Tools). |
 
-Pick a specific mic with `VOICEOS_MIC=Scarlett ./ptt.sh`.
+Pick a specific mic with `OTTO_MIC=Scarlett ./run.sh`.
 
 > **Want hands-free without the idle cost?** Use `--local`. The wake word and
 > transcription run entirely on your Mac (free); only an actual command reaches
 > the cloud. Note the local wake word is `hey jarvis` (an OpenWakeWord built-in) —
 > `hey chat` is only available in the cloud `--wake` mode unless you train a
 > custom OpenWakeWord model. Pick a bigger local Whisper for accuracy with
-> `VOICEOS_WHISPER=small.en` (or `distil-large-v3`).
+> `OTTO_WHISPER=small.en` (or `distil-large-v3`).
 
 ---
 
-## The SwiftUI palette app
+## The palette app
 
-`./run.sh --app` launches a native macOS command palette (a borderless floating
-panel, summoned with **⌥Space**) instead of the terminal. Type a command and
-press return, or hold the mic button to talk — the waveform, transcript, and
-spoken result render in the UI.
+`./run.sh --app` launches a native macOS command palette — a borderless floating
+panel, summoned with **⌥Space**. Type a command and press return, or hold the mic
+button to talk; the waveform, transcript, and spoken result render live in the UI.
 
 Under the hood it's the same Python engine: the Swift app spawns
 `src/voice_agent.py --ipc` and talks to it over a localhost TCP socket
@@ -70,14 +73,14 @@ Under the hood it's the same Python engine: the Swift app spawns
 side stays a thin front-end; all the brains live in Python.
 
 ```bash
-./run.sh --app     # auto-builds VoiceOS.app on first run, then launches it
-make app           # build only → VoiceOS/build/VoiceOS.app
+./run.sh --app     # auto-builds Otto.app on first run, then launches it
+make app           # build only → Otto/build/Otto.app
 make clean         # remove the build output
 ```
 
 Building needs **Xcode Command Line Tools** only (`xcode-select --install`) —
 no full Xcode required. The `Makefile` compiles the Swift sources with `swiftc`,
-bundles them into `VoiceOS.app`, and ad-hoc code-signs the result.
+bundles them into `Otto.app`, and ad-hoc code-signs the result.
 
 ---
 
@@ -115,7 +118,7 @@ memory/capabilities.user.json → re-embedded next startup
 
 The model has **no hardcoded routing rules**. It receives the retrieved
 capability as a recipe and fills in the parameters. New capabilities are
-added by editing `memory/capabilities.json` — or by just using the OS and
+added by editing `memory/capabilities.json` — or by just using your Mac and
 letting the retrospective learn them for you.
 
 ---
@@ -147,7 +150,7 @@ embedding cache auto-regenerates. No Python needed.
 
 ## The dreaming loop
 
-At the end of every session (Ctrl-C), the system runs a retrospective:
+At the end of every session (Ctrl-C), Otto runs a retrospective:
 
 ```bash
 python src/retrospective.py              # reflect on the last session
@@ -163,8 +166,8 @@ tool that ran, and does one of two things per command:
 2. **Creates a new capability** only when the action is genuinely new.
 
 The result is written to `memory/capabilities.user.json` and re-embedded next
-startup. The OS tunes itself to your specific vocabulary without you writing any
-code.
+startup. Otto tunes itself to your specific vocabulary without you writing any
+code. This is the compounding loop — the more you use it, the better it fits.
 
 ---
 
@@ -184,32 +187,37 @@ into the retrospective manually.
 
 ## Configuration
 
-All tuneable values live in `.env` (copy `.env.example` to get started):
+All tuneable values live in `.env` (copy `.env.example` to get started). Env vars
+use the `OTTO_` prefix:
 
-| Variable                      | Default              | Description                                               |
-| ----------------------------- | -------------------- | --------------------------------------------------------- |
-| `OPENAI_API_KEY`              | —                    | Required. Realtime-capable key.                           |
-| `VOICEOS_TRANSCRIBE_MODEL`    | `gpt-4o-transcribe`  | Cloud STT for push-to-talk/hotkey/`--wake`. Bigger = more accurate (`gpt-4o-mini-transcribe`, `whisper-1`). |
-| `VOICEOS_WHISPER`             | `small.en`           | **Local** STT size for `--local` mode (`tiny.en`…`distil-large-v3`). Runs on-device, $0 idle. |
-| `VOICEOS_OWW_MODEL`           | `hey_jarvis`         | Local wake word for `--local` (`hey_jarvis`/`hey_mycroft`/`alexa`, or a custom model path). |
-| `VOICEOS_OWW_THRESHOLD`       | `0.5`                | Local wake sensitivity: lower = more sensitive.           |
-| `VOICEOS_BROWSER`             | `Safari`             | Browser for web searches.                                 |
-| `VOICEOS_USER_NAME`           | `the user`           | Your name in the system prompt.                           |
-| `VOICEOS_USER_HINTS`          | —                    | Free-text hints e.g. accent, preferences.                 |
-| `VOICEOS_PREMIERE_APP`        | `Adobe Premiere Pro` | Exact app name (update yearly).                           |
-| `VOICEOS_SPOTIFY_FAVORITES`   | —                    | Path to JSON file of phrase → spotify URI mappings.       |
-| `VOICEOS_CLAUDE_PROJECT`      | —                    | Claude Desktop project name for `ask_claude`.             |
-| `VOICEOS_CLAUDE_PROJECT_HINT` | —                    | Phrase from the project's system prompt (skip-nav check). |
-| `VOICEOS_EMBED_MODEL`         | `all-MiniLM-L6-v2`   | Local sentence-transformers model for retrieval.          |
+| Variable                    | Default              | Description                                               |
+| --------------------------- | -------------------- | --------------------------------------------------------- |
+| `OPENAI_API_KEY`            | —                    | Required. Realtime-capable key.                           |
+| `OTTO_TRANSCRIBE_MODEL`     | `gpt-4o-transcribe`  | Cloud STT for push-to-talk/hotkey/`--wake`. Bigger = more accurate (`gpt-4o-mini-transcribe`, `whisper-1`). |
+| `OTTO_WHISPER`              | `small.en`           | **Local** STT size for `--local` mode (`tiny.en`…`distil-large-v3`). Runs on-device, $0 idle. |
+| `OTTO_OWW_MODEL`            | `hey_jarvis`         | Local wake word for `--local` (`hey_jarvis`/`hey_mycroft`/`alexa`, or a custom model path). |
+| `OTTO_OWW_THRESHOLD`        | `0.5`                | Local wake sensitivity: lower = more sensitive.           |
+| `OTTO_BROWSER`              | `Safari`             | Browser for web searches.                                 |
+| `OTTO_USER_NAME`            | `the user`           | Your name in the system prompt.                           |
+| `OTTO_USER_HINTS`           | —                    | Free-text hints e.g. accent, preferences.                 |
+| `OTTO_PREMIERE_APP`         | `Adobe Premiere Pro` | Exact app name (update yearly).                           |
+| `OTTO_SPOTIFY_FAVORITES`    | —                    | Path to JSON file of phrase → spotify URI mappings.       |
+| `OTTO_CLAUDE_PROJECT`       | —                    | Claude Desktop project name for `ask_claude`.             |
+| `OTTO_CLAUDE_PROJECT_HINT`  | —                    | Phrase from the project's system prompt (skip-nav check). |
+| `OTTO_EMBED_MODEL`          | `all-MiniLM-L6-v2`   | Local sentence-transformers model for retrieval.          |
+
+> Pre-rebrand `VOICEOS_*` variables are still honored as a fallback (with a
+> one-time deprecation note), so an old `.env` keeps working — rename them to
+> `OTTO_*` when convenient.
 
 ---
 
 ## Cost & privacy
 
 - **Cost:** `gpt-realtime-2` is ~$32/$64 per 1M audio tokens — roughly **a few
-  cents per command**. Push-to-talk, hotkey, and `--local` are **$0 idle**
-  (audio only leaves your Mac for an actual command). The cloud wake word
-  (`--wake`) transcribes continuously, so it bills while idle — use `--local`
+  cents per command**. The palette app, push-to-talk, hotkey, and `--local` are
+  **$0 idle** (audio only leaves your Mac for an actual command). The cloud wake
+  word (`--wake`) transcribes continuously, so it bills while idle — use `--local`
   for hands-free without that cost.
 - **Local wake + STT:** `--local` runs OpenWakeWord and faster-whisper on-device.
   Wake detection is ~free CPU; Whisper only runs per-command. No idle API cost.
@@ -223,7 +231,7 @@ All tuneable values live in `.env` (copy `.env.example` to get started):
 ## Project layout
 
 ```
-voice-os/
+otto/
 ├── run.sh  ptt.sh  start.sh        entrypoints (run these)
 ├── Makefile                        builds the SwiftUI app (make app)
 ├── requirements*.txt  .env.example
@@ -233,16 +241,17 @@ voice-os/
 │   ├── actions.py                  the 5 primitive tools the model calls
 │   ├── retrieval.py                local capability embedding index + cosine search
 │   ├── retrospective.py            post-session dreaming loop — learns your phrasings
+│   ├── learning_store.py           persistence, journal, undo, usage stats for learned capabilities
 │   ├── session_log.py              structured per-session JSONL event logger
 │   ├── ipc_server.py               localhost TCP/JSON bridge for the SwiftUI app
-│   ├── config.py                   all tuneable constants, read from env
+│   ├── config.py                   all tuneable constants, read from env (OTTO_ prefix)
 │   ├── voice_app.py                safe global-hotkey front-end (Carbon RegisterEventHotKey)
 │   ├── ax_keeper.py                keeps Claude Desktop's accessibility tree on
 │   └── overlay.py                  waveform HUD
-├── VoiceOS/                        native SwiftUI command-palette app (./run.sh --app)
-│   ├── VoiceOS.xcodeproj           open in Xcode, or build with `make app`
-│   └── VoiceOS/                    Swift sources
-│       ├── VoiceOSApp.swift        app delegate — spawns the Python engine, wires the hotkey
+├── Otto/                           native SwiftUI command-palette app (./run.sh --app)
+│   ├── Otto.xcodeproj              open in Xcode, or build with `make app`
+│   └── Otto/                       Swift sources
+│       ├── OttoApp.swift           app delegate — spawns the Python engine, wires the hotkey
 │       ├── CommandPalette.swift    the floating palette view (text field + mic + waveform)
 │       ├── PythonBridge.swift      TCP/JSON client that drives the UI from Python events
 │       ├── HotkeyManager.swift     global ⌥Space summon hotkey (Carbon RegisterEventHotKey)
@@ -272,9 +281,14 @@ pytest                                # runs tests/
 - `tests/test_voice_agent.py` — the wake-word gate (`is_wake`): standard phrases,
   NZ-accent mishears of "chat", and false positives that must not fire.
 - `tests/test_build.py` — verifies `make app` produces a valid, runnable
-  `VoiceOS.app` with Command Line Tools only. Slow (invokes `swiftc`); run it
+  `Otto.app` with Command Line Tools only. Slow (invokes `swiftc`); run it
   explicitly when touching the Makefile or any Swift source: `pytest tests/test_build.py -v`.
 - `tests/test_loop.py` — optional live end-to-end check against the Realtime API
   (needs `OPENAI_API_KEY`): `python tests/test_loop.py "open Spotify"`.
 
-License: MIT. Have fun — go tell your agent to build it out.
+---
+
+License: MIT.
+
+Otto began as a fork of [voice-os](https://github.com/per-simmons/voice-os) by
+Pat Simmons, and has since grown into its own thing.

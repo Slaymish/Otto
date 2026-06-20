@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 @main
-struct VoiceOSApp: App {
+struct OttoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
 
     var body: some Scene {
@@ -21,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var stdoutPipe: Pipe?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        print("[VoiceOS] app started")
+        print("[Otto] app started")
         NSApp.setActivationPolicy(.accessory)
 
         paletteController = PaletteController(bridge: bridge)
@@ -42,10 +42,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func launchPython() {
         guard let root = findProjectRoot() else {
-            print("[VoiceOS] ERROR: could not locate project root — set VOICEOS_PROJECT_ROOT env var.")
+            print("[Otto] ERROR: could not locate project root — set OTTO_PROJECT_ROOT env var.")
             return
         }
-        print("[VoiceOS] project root: \(root.path)")
+        print("[Otto] project root: \(root.path)")
 
         let venv = root.appendingPathComponent(".venv/bin/python3")
         let fallback = root.appendingPathComponent(".venv/bin/python")
@@ -55,10 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else if FileManager.default.fileExists(atPath: fallback.path) {
             python = fallback
         } else {
-            print("[VoiceOS] ERROR: no .venv python found at \(root.path)")
+            print("[Otto] ERROR: no .venv python found at \(root.path)")
             return
         }
-        print("[VoiceOS] launching python: \(python.path)")
+        print("[Otto] launching python: \(python.path)")
 
         let script = root.appendingPathComponent("src/voice_agent.py")
         let process = Process()
@@ -90,7 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         process.terminationHandler = { p in
-            print("[VoiceOS] python exited with code \(p.terminationStatus)")
+            print("[Otto] python exited with code \(p.terminationStatus)")
         }
 
         try? process.run()
@@ -101,7 +101,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Project root discovery
 
     private func findProjectRoot() -> URL? {
-        if let env = ProcessInfo.processInfo.environment["VOICEOS_PROJECT_ROOT"] {
+        if let env = ProcessInfo.processInfo.environment["OTTO_PROJECT_ROOT"]
+            ?? ProcessInfo.processInfo.environment["VOICEOS_PROJECT_ROOT"] {
             return URL(fileURLWithPath: env)
         }
         var url = Bundle.main.bundleURL

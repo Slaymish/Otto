@@ -1,5 +1,5 @@
 """
-retrospective.py — post-session "dreaming" loop for voice-os.
+retrospective.py — post-session "dreaming" loop for Otto.
 
 After a session ends, this module:
   1. Reads the session log (structured JSONL)
@@ -350,7 +350,7 @@ if __name__ == "__main__":
                 k, _, v = line.partition("=")
                 os.environ.setdefault(k.strip(), v.strip())
 
-    parser = argparse.ArgumentParser(description="voice-os retrospective / dreaming loop")
+    parser = argparse.ArgumentParser(description="Otto retrospective / dreaming loop")
     parser.add_argument("--sessions", type=int, default=1,
                         help="number of recent sessions to reflect on (default: 1)")
     parser.add_argument("--session-file", type=str, default=None,

@@ -1,5 +1,5 @@
 """
-session_log.py — structured per-session event log for voice-os.
+session_log.py — structured per-session event log for Otto.
 
 Every session writes a JSONL file to memory/sessions/<ISO-timestamp>.jsonl.
 Events are structured (not just text) so the retrospective can reason over them.

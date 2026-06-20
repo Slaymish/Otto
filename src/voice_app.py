@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-voice_app.py — SAFE global hotkey front-end for the voice OS.
+voice_app.py — SAFE global hotkey front-end for Otto.
 
 Registers a real macOS global hotkey via Carbon `RegisterEventHotKey`. This is
 the safe way to do a system-wide push-to-talk:

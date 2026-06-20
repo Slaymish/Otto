@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run.sh — bootstrap + launch voice-os.
+# run.sh — bootstrap + launch Otto.
 # Idempotent: safe to run every time. Downloads everything needed on first run.
 #
 # Modes:
@@ -79,7 +79,7 @@ step "checking models (downloads once, then cached)"
 # sentence-transformers embedding model for capability retrieval
 python3 - <<'PYEOF'
 import os, sys
-model_name = os.environ.get("VOICEOS_EMBED_MODEL", "all-MiniLM-L6-v2")
+model_name = os.environ.get("OTTO_EMBED_MODEL") or os.environ.get("VOICEOS_EMBED_MODEL") or "all-MiniLM-L6-v2"
 try:
     from sentence_transformers import SentenceTransformer
     # will download if not cached (~22 MB), instant if already cached
@@ -123,40 +123,40 @@ done
 if [[ " $* " == *" --app "* ]]; then
   # Prefer a local make-built app; fall back to whatever Xcode left in DerivedData.
   APP=""
-  if [ -d "$(pwd)/VoiceOS/build/VoiceOS.app" ]; then
-    APP="$(pwd)/VoiceOS/build/VoiceOS.app"
+  if [ -d "$(pwd)/Otto/build/Otto.app" ]; then
+    APP="$(pwd)/Otto/build/Otto.app"
   else
     for candidate in \
-        "$(pwd)/VoiceOS/build/Build/Products/Release/VoiceOS.app" \
-        "$(pwd)/VoiceOS/build/Build/Products/Debug/VoiceOS.app"; do
+        "$(pwd)/Otto/build/Build/Products/Release/Otto.app" \
+        "$(pwd)/Otto/build/Build/Products/Debug/Otto.app"; do
       [ -d "$candidate" ] && APP="$candidate" && break
     done
   fi
   if [ -z "$APP" ]; then
-    APP=$(find ~/Library/Developer/Xcode/DerivedData -name "VoiceOS.app" \
-          -path "*/Build/Products/*/VoiceOS.app" \
+    APP=$(find ~/Library/Developer/Xcode/DerivedData -name "Otto.app" \
+          -path "*/Build/Products/*/Otto.app" \
           -not -path "*/Index.noindex/*" 2>/dev/null \
           | while IFS= read -r p; do printf "%s %s\n" "$(stat -f "%m" "$p")" "$p"; done \
           | sort -rn | head -1 | cut -d' ' -f2-)
   fi
   if [ -z "$APP" ] || [ ! -d "$APP" ]; then
-    step "VoiceOS.app not found — building (requires Command Line Tools: xcode-select --install)"
+    step "Otto.app not found — building (requires Command Line Tools: xcode-select --install)"
     make app || fail "Build failed. Run 'xcode-select --install' if swiftc is missing."
-    APP="$(pwd)/VoiceOS/build/VoiceOS.app"
+    APP="$(pwd)/Otto/build/Otto.app"
   fi
   ok "found app: $APP"
   step "launching SwiftUI palette app"
   # Launch the binary directly (not open) so it inherits OPENAI_API_KEY and
-  # VOICEOS_PROJECT_ROOT from this shell; stay in the process group so Ctrl-C
+  # OTTO_PROJECT_ROOT from this shell; stay in the process group so Ctrl-C
   # kills both the script and the UI together.
-  VOICEOS_PROJECT_ROOT="$(pwd)" "$APP/Contents/MacOS/VoiceOS" &
+  OTTO_PROJECT_ROOT="$(pwd)" "$APP/Contents/MacOS/Otto" &
   APP_PID=$!
   echo -e "   ${BOLD}⌥Space${RESET} to summon the palette  ·  type or hold mic button to talk"
   wait "$APP_PID"
 elif [[ " $* " == *" --local "* ]]; then
-  OWW=${VOICEOS_OWW_MODEL:-hey_jarvis}
+  OWW=${OTTO_OWW_MODEL:-${VOICEOS_OWW_MODEL:-hey_jarvis}}
   step "launching local wake-word engine (\$0 idle — nothing leaves your Mac until you speak the wake word)"
-  echo -e "   Say ${BOLD}\"${OWW//_/ }, …\"${RESET} to trigger a command (set VOICEOS_OWW_MODEL to change)."
+  echo -e "   Say ${BOLD}\"${OWW//_/ }, …\"${RESET} to trigger a command (set OTTO_OWW_MODEL to change)."
   echo ""
   python src/wake_listener.py "${FILTERED_ARGS[@]+${FILTERED_ARGS[@]}}"
 elif [[ " $* " == *" --wake "* ]]; then

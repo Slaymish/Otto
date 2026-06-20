@@ -9,9 +9,9 @@ __pycache__/
 
 # Runtime artifacts
 *.log
-voiceos-app.log
-VoiceOS.app.DISABLED/
-VoiceOS.app/
+otto-app.log
+Otto.app.DISABLED/
+Otto.app/
 
 # macOS
 .DS_Store

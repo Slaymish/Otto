@@ -1,6 +1,6 @@
 """
 learning_store.py — persistence, journal, undo, usage stats, and confidence for
-voice-os learned capabilities.
+Otto's learned capabilities.
 
 Owns memory/capabilities.user.json (the learned/overlay capability list) and
 memory/learning_journal.jsonl (an append-only before/after record enabling

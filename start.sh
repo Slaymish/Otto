@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Launch the whole Voice OS. Run this IN YOUR OWN TERMINAL (so the clean
+# Launch the whole of Otto. Run this IN YOUR OWN TERMINAL (so the clean
 # ⚙ tool-call output is visible for screen recording, and so the accessibility
 # keeper is "trusted").
 #
-#   cd .../voice-os && ./start.sh
+#   cd .../otto && ./start.sh
 #
 # Hold LEFT OPTION + Z (⌥Z) anywhere to talk. Ctrl-C to quit.
 set -euo pipefail
@@ -19,7 +19,8 @@ python src/ax_keeper.py >/dev/null 2>&1 &
 pkill -f overlay.py 2>/dev/null || true
 python src/overlay.py >/dev/null 2>&1 &
 
-# 3. the voice OS, in the foreground so you SEE every ⚙ tool call / ✓ result.
-#    (set VOICEOS_MIC to target a specific mic, e.g. VOICEOS_MIC=Scarlett ./start.sh)
+# 3. Otto, in the foreground so you SEE every ⚙ tool call / ✓ result.
+#    (set OTTO_MIC to target a specific mic, e.g. OTTO_MIC=Scarlett ./start.sh)
 pkill -f voice_app.py 2>/dev/null || true
-exec python src/voice_app.py --combo opt+z ${VOICEOS_MIC:+--mic "$VOICEOS_MIC"}
+MIC="${OTTO_MIC:-${VOICEOS_MIC:-}}"
+exec python src/voice_app.py --combo opt+z ${MIC:+--mic "$MIC"}

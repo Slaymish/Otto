@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-actions.py — the "hands" of the voice OS.
+actions.py — the "hands" of Otto.
 
 Each function here is a single, reliable, high-level intent that maps to one of
 the beats in the GPT-Realtime-2 cold-open script. The voice agent
@@ -187,7 +187,7 @@ def open_app(name: str) -> dict:
 
 
 def _load_favorites() -> dict:
-    """Load Spotify favorites from VOICEOS_SPOTIFY_FAVORITES JSON file.
+    """Load Spotify favorites from OTTO_SPOTIFY_FAVORITES JSON file.
     Returns empty dict if unset or file is missing/malformed."""
     path = config.SPOTIFY_FAVORITES_FILE
     if not path:
@@ -201,7 +201,7 @@ def _load_favorites() -> dict:
     except FileNotFoundError:
         return {}
     except Exception as e:  # noqa: BLE001
-        print(f"[voice-os] warning: could not load favorites from {path}: {e}", flush=True)
+        print(f"[otto] warning: could not load favorites from {path}: {e}", flush=True)
         return {}
 
 
@@ -344,7 +344,7 @@ def _find_link_by_subtext(data: dict, needle: str):
 
 def _claude_in_project(name: str) -> bool:
     """True if Claude is ALREADY showing the named project (so we can skip the
-    navigation + its visible bounce). Requires VOICEOS_CLAUDE_PROJECT_HINT to be
+    navigation + its visible bounce). Requires OTTO_CLAUDE_PROJECT_HINT to be
     set to a short unique phrase from the project's system prompt."""
     hint = config.CLAUDE_PROJECT_HINT.strip().lower()
     if not hint:

@@ -314,10 +314,10 @@ async def main():
     oww = OWWModel(wakeword_models=[OWW_MODEL], enable_speex_noise_suppression=False)
 
     print("=" * 62)
-    print('  🎙  VOICE OS — LOCAL WAKE WORD ($0 idle): say "hey jarvis, …"')
+    print('  🎙  OTTO — LOCAL WAKE WORD ($0 idle): say "hey jarvis, …"')
     print(f"  mic: {mic_name}   ·   wake: {OWW_MODEL}   ·   STT: {WHISPER_SIZE}   ·   brain: {MODEL}")
     print("  wake detection runs FREE on your Mac; cloud only called on a match.")
-    print(f"  OWW threshold: {OWW_THRESHOLD}  (tune via VOICEOS_OWW_THRESHOLD env var)")
+    print(f"  OWW threshold: {OWW_THRESHOLD}  (tune via OTTO_OWW_THRESHOLD env var)")
     print("  Ctrl-C to quit.")
     print("=" * 62, flush=True)
     _log("--- start (OWW WAKE) ---")

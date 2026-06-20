@@ -1,5 +1,5 @@
 """
-retrieval.py — local capability retrieval for voice-os.
+retrieval.py — local capability retrieval for Otto.
 
 Loads capabilities.json (+ optional user overlay), embeds every example query
 using a local sentence-transformers model, and exposes cosine search so the
@@ -34,7 +34,7 @@ _USER_CAPABILITIES_PATH = _ROOT / "memory" / "capabilities.user.json"
 _EMBED_CACHE = _ROOT / "memory" / "embeddings.npy"
 _EMBED_IDS_CACHE = _ROOT / "memory" / "embedding_ids.json"
 
-_MODEL_NAME = os.environ.get("VOICEOS_EMBED_MODEL", "all-MiniLM-L6-v2")
+_MODEL_NAME = config.env("EMBED_MODEL", "all-MiniLM-L6-v2")
 
 _STRONG_FLOOR = 0.52
 _NEAR_FLOOR = 0.40

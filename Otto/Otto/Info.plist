@@ -22,7 +22,7 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>VoiceOS uses the microphone to capture voice commands.</string>
+	<string>Otto uses the microphone to capture voice commands.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

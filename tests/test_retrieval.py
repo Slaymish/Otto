@@ -3,7 +3,7 @@
 test_retrieval.py — the heart of the matter: spoken VARIATIONS must retrieve the
 right capability template.
 
-This is what makes the voice OS forgiving: a user never says the exact example
+This is what makes Otto forgiving: a user never says the exact example
 phrase, so each command is a paraphrase. These tests assert that realistic
 paraphrases land on the correct capability as the top hit with STRONG grounding,
 and that off-topic chatter stays WEAK (so the OS doesn't fire on noise).
