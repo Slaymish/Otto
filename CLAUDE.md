@@ -22,6 +22,8 @@ OTTO_MIC=Scarlett ./run.sh
 # Run retrospective manually (learn from last N sessions)
 cd src && python retrospective.py
 cd src && python retrospective.py --sessions 3
+cd src && python retrospective.py --journal      # print what you've learned
+cd src && python retrospective.py --undo <id>    # undo a learned capability
 
 # Test individual tools without OpenAI
 cd src && python actions.py run_applescript 'tell application "Spotify" to play'

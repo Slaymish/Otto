@@ -78,6 +78,8 @@ make app           # build only → Otto/build/Otto.app
 make clean         # remove the build output
 ```
 
+Press **⌥⇧Space** to open the **Journal** — what Otto has learned, how often you use each capability, and one-tap undo.
+
 Building needs **Xcode Command Line Tools** only (`xcode-select --install`) —
 no full Xcode required. The `Makefile` compiles the Swift sources with `swiftc`,
 bundles them into `Otto.app`, and ad-hoc code-signs the result.

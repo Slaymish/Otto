@@ -7,3 +7,6 @@ sessions/
 # Embedding cache (regenerated automatically)
 embeddings.npy
 embedding_ids.json
+
+# Incremental learning journal (machine-local, may contain personal command history)
+learning_journal.jsonl
