@@ -585,7 +585,7 @@ async def _run_incremental_learner(turn: dict, near_miss_id: "str | None") -> No
         {"id": c.id, "description": c.description, "examples": c.examples}
         for c in _cap_index._caps
     ]
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     async with _learn_lock:
         t0 = time.monotonic()
         try:
