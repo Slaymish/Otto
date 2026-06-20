@@ -85,3 +85,21 @@ def test_undo_added_phrasing_restores_prior_examples(tmp_path, monkeypatch):
     ls.apply_updates([{"id": "thing", "examples": ["bar"]}])
     assert ls.undo("thing") is True
     assert next(c for c in ls.load_user_caps() if c["id"] == "thing")["examples"] == ["foo"]
+
+
+def test_apply_and_undo_builtin_overlay(tmp_path, monkeypatch):
+    _point(monkeypatch, tmp_path)
+    # a shipped (builtin) capability, with no user overlay yet
+    (tmp_path / "capabilities.json").write_text(json.dumps([
+        {"id": "app-open", "description": "open an app",
+         "examples": ["open Spotify"], "primitive": "run_applescript",
+         "template": "tell application ..."}]))
+    events = ls.apply_updates([{"id": "app-open", "examples": ["fire up spotify"]}])
+    # teaching a new phrasing for an existing builtin is an added_phrasing, not a new capability
+    assert len(events) == 1 and events[0].action == "added_phrasing"
+    overlay = next(c for c in ls.load_user_caps() if c["id"] == "app-open")
+    assert "fire up spotify" in overlay["examples"]
+    assert "open Spotify" in overlay["examples"]  # builtin examples preserved
+    # undo removes the overlay entirely (reverts to the builtin passthrough)
+    assert ls.undo("app-open") is True
+    assert all(c["id"] != "app-open" for c in ls.load_user_caps())

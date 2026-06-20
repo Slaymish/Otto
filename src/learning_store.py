@@ -12,6 +12,7 @@ import copy
 import json
 import math
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -87,7 +88,7 @@ def confidence(times_used: int, success_rate: float) -> float:
 
 
 def _append_journal(record: dict) -> None:
-    record["t"] = round(time.time(), 3)
+    record = {**record, "t": round(time.time(), 3)}
     JOURNAL_PATH.parent.mkdir(parents=True, exist_ok=True)
     try:
         with open(JOURNAL_PATH, "a") as f:
@@ -144,7 +145,7 @@ def apply_updates(updates: list[dict]) -> list[LearningEvent]:
         learned_at = _now_iso()
         learned_marker = {"event": "learned", "id": cid, "action": action,
                           "phrase": phrase, "description": after.get("description", ""),
-                          "learned_at": learned_at,
+                          "learned_at": learned_at, "entry_id": uuid.uuid4().hex,
                           "before": before, "after": copy.deepcopy(after)}
         _append_journal(learned_marker)
         events.append(LearningEvent(
@@ -163,7 +164,7 @@ def undo(cap_id: str) -> bool:
     undone_refs = {r.get("ref") for r in recs if r.get("event") == "undone"}
     last = None
     for r in recs:
-        if r.get("event") == "learned" and r.get("id") == cap_id and r.get("t") not in undone_refs:
+        if r.get("event") == "learned" and r.get("id") == cap_id and r.get("entry_id") not in undone_refs:
             last = r
     if last is None:
         return False
@@ -175,5 +176,5 @@ def undo(cap_id: str) -> bool:
     else:
         by_id[cap_id] = last["before"]
     save_user_caps(list(by_id.values()))
-    _append_journal({"event": "undone", "id": cap_id, "ref": last.get("t")})
+    _append_journal({"event": "undone", "id": cap_id, "ref": last.get("entry_id")})
     return True
