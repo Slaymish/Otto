@@ -31,7 +31,8 @@ SOURCES := \
 	Otto/Otto/OnboardingView.swift \
 	Otto/Otto/HotkeyConfig.swift   \
 	Otto/Otto/HotkeyRecorderView.swift \
-	Otto/Otto/UpdateChecker.swift
+	Otto/Otto/UpdateChecker.swift  \
+	Otto/Otto/CapabilityKind.swift
 
 APP       := Otto/build/Otto.app
 BINARY    := $(APP)/Contents/MacOS/Otto
