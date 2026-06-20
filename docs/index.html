@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Otto — a Mac assistant that learns how you work</title>
+<meta name="description" content="Summon Otto with a keystroke. Say what you want and it does it. A single native macOS app that quietly rewrites its own memory so it fits you better every day." />
+
+<!-- Open Graph -->
+<meta property="og:title" content="Otto — a Mac assistant that learns how you work" />
+<meta property="og:description" content="Voice and text control for your Mac. No chat window, no context-switching. The more you use it, the better it fits." />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="otto-icon.png" />
+
+<link rel="icon" type="image/png" href="otto-icon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --bg: #07070a;
+    --bg-soft: #0d0d13;
+    --panel: #121219;
+    --panel-2: #16161f;
+    --line: #23232e;
+    --text: #f2f2f5;
+    --muted: #9a9aab;
+    --faint: #6a6a78;
+    --accent: #ff6a3d;
+    --accent-2: #ffb05c;
+    --accent-soft: rgba(255, 106, 61, 0.14);
+    --glow: rgba(255, 106, 61, 0.55);
+    --radius: 18px;
+    --maxw: 1080px;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  a { color: inherit; text-decoration: none; }
+
+  code, .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace; }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- background glow ---------- */
+  .bg-orb {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(600px 400px at 75% -5%, rgba(255, 106, 61, 0.18), transparent 60%),
+      radial-gradient(700px 500px at 10% 10%, rgba(120, 90, 255, 0.10), transparent 55%);
+  }
+
+  .content { position: relative; z-index: 1; }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    backdrop-filter: blur(14px);
+    background: rgba(7, 7, 10, 0.6);
+    border-bottom: 1px solid transparent;
+    transition: border-color .3s ease;
+  }
+  nav.scrolled { border-color: var(--line); }
+  .nav-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 64px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -0.02em; }
+  .brand img { width: 28px; height: 28px; border-radius: 7px; }
+  .nav-links { display: flex; gap: 28px; align-items: center; }
+  .nav-links a { color: var(--muted); font-size: 14px; font-weight: 500; transition: color .2s; }
+  .nav-links a:hover { color: var(--text); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 18px; border-radius: 12px;
+    font-weight: 600; font-size: 14px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #15100c;
+    box-shadow: 0 8px 30px -8px var(--glow);
+    transition: transform .15s ease, box-shadow .2s ease;
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 14px 40px -10px var(--glow); }
+  .btn.ghost {
+    background: transparent; color: var(--text);
+    border: 1px solid var(--line); box-shadow: none;
+  }
+  .btn.ghost:hover { border-color: var(--faint); background: var(--panel); }
+  @media (max-width: 680px) { .nav-links a:not(.btn) { display: none; } }
+
+  /* ---------- hero ---------- */
+  header { padding: 96px 0 72px; text-align: center; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--panel);
+    color: var(--muted); font-size: 13px; font-weight: 500;
+    margin-bottom: 28px;
+  }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--glow); }
+
+  .hero-icon {
+    width: 110px; height: 110px; border-radius: 26px; margin-bottom: 28px;
+    box-shadow: 0 30px 70px -20px rgba(255, 106, 61, 0.45);
+    animation: float 5s ease-in-out infinite;
+  }
+  @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+  h1 {
+    font-size: clamp(40px, 7vw, 76px);
+    line-height: 1.02; letter-spacing: -0.04em; font-weight: 800;
+    margin: 0 0 22px;
+  }
+  h1 .grad {
+    background: linear-gradient(120deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .lede {
+    font-size: clamp(17px, 2.4vw, 21px);
+    color: var(--muted); max-width: 640px; margin: 0 auto 18px;
+  }
+  .lede strong { color: var(--text); font-weight: 600; }
+  .sub-note { color: var(--faint); font-size: 14px; margin-bottom: 36px; }
+  .hero-cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+
+  /* ---------- demo terminal ---------- */
+  .demo {
+    margin: 64px auto 0; max-width: 720px;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    box-shadow: 0 40px 90px -40px rgba(0,0,0,0.8);
+    overflow: hidden; text-align: left;
+  }
+  .demo-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 14px 16px; border-bottom: 1px solid var(--line);
+    background: rgba(255,255,255,0.02);
+  }
+  .demo-bar .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .demo-bar .r { background: #ff5f56; } .demo-bar .y { background: #ffbd2e; } .demo-bar .g { background: #27c93f; }
+  .demo-bar .title { margin-left: 10px; color: var(--faint); font-size: 12px; }
+  .demo-body { padding: 26px 24px; font-size: 15px; }
+  .turn { display: flex; gap: 12px; margin-bottom: 18px; opacity: 0; transform: translateY(8px); animation: rise .6s forwards; }
+  .turn:nth-child(1) { animation-delay: .2s; }
+  .turn:nth-child(2) { animation-delay: 1.1s; }
+  .turn:nth-child(3) { animation-delay: 2.0s; }
+  .turn:nth-child(4) { animation-delay: 2.9s; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  .turn .who { flex: 0 0 64px; color: var(--faint); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; padding-top: 2px; }
+  .turn .msg { color: var(--text); }
+  .turn.you .msg { color: var(--text); }
+  .turn.otto .msg { color: var(--accent-2); }
+  .turn .msg .act { color: var(--muted); font-size: 13.5px; display: block; margin-top: 4px; }
+  .turn .msg .act .mono { color: var(--faint); }
+
+  /* ---------- sections ---------- */
+  section { padding: 84px 0; }
+  .eyebrow {
+    text-transform: uppercase; letter-spacing: .14em; font-size: 12.5px;
+    font-weight: 600; color: var(--accent); margin-bottom: 14px;
+  }
+  h2 { font-size: clamp(28px, 4.4vw, 42px); letter-spacing: -0.03em; line-height: 1.1; margin: 0 0 16px; font-weight: 800; }
+  .section-lede { color: var(--muted); font-size: 17px; max-width: 620px; margin: 0 0 8px; }
+  .center { text-align: center; }
+  .center .section-lede { margin-left: auto; margin-right: auto; }
+
+  /* ---------- steps ---------- */
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 48px; }
+  .step {
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--panel); padding: 24px 20px; position: relative;
+    transition: transform .2s ease, border-color .2s ease;
+  }
+  .step:hover { transform: translateY(-4px); border-color: var(--accent-soft); }
+  .step .num {
+    font-family: "JetBrains Mono", monospace; font-size: 13px;
+    color: var(--accent); margin-bottom: 14px; font-weight: 500;
+  }
+  .step h3 { margin: 0 0 8px; font-size: 17px; letter-spacing: -0.01em; }
+  .step p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  @media (max-width: 880px) { .steps { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 480px) { .steps { grid-template-columns: 1fr; } }
+
+  /* ---------- primitives ---------- */
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 44px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    padding: 24px; transition: border-color .2s ease, transform .2s ease;
+  }
+  .card:hover { border-color: var(--accent-soft); transform: translateY(-3px); }
+  .card .top { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .card .top .ic {
+    width: 38px; height: 38px; border-radius: 10px; flex: 0 0 38px;
+    display: grid; place-items: center; font-size: 18px;
+    background: var(--accent-soft); border: 1px solid var(--accent-soft);
+  }
+  .card code { color: var(--accent-2); font-size: 14px; font-weight: 500; }
+  .card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+  .note {
+    margin-top: 26px; padding: 18px 22px; border-radius: 14px;
+    border: 1px solid var(--line); background: var(--accent-soft);
+    color: var(--text); font-size: 15px;
+  }
+  .note strong { color: var(--accent-2); }
+
+  /* ---------- learn flow ---------- */
+  .flow {
+    margin-top: 44px; border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--panel); padding: 8px;
+    display: grid; grid-template-columns: 1fr; gap: 2px;
+  }
+  .flow-row {
+    display: grid; grid-template-columns: 150px 1fr; gap: 20px;
+    padding: 22px 22px; border-radius: 12px; align-items: start;
+  }
+  .flow-row:hover { background: var(--panel-2); }
+  .flow-row .stage { color: var(--accent); font-weight: 600; font-size: 14px; }
+  .flow-row .desc { color: var(--muted); font-size: 15px; }
+  .flow-row .desc strong { color: var(--text); font-weight: 600; }
+  @media (max-width: 600px) { .flow-row { grid-template-columns: 1fr; gap: 6px; } }
+
+  /* ---------- privacy ---------- */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 44px; }
+  .stat {
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--panel); padding: 28px 24px; text-align: center;
+  }
+  .stat .big { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 6px; }
+  .stat .big.grad { background: linear-gradient(120deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .stat p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  @media (max-width: 700px) { .stats { grid-template-columns: 1fr; } }
+
+  /* ---------- code block ---------- */
+  pre {
+    margin: 28px 0 0; border: 1px solid var(--line); border-radius: 14px;
+    background: var(--bg-soft); padding: 22px; overflow-x: auto;
+    font-size: 13.5px; line-height: 1.7;
+  }
+  pre .k { color: var(--accent-2); }
+  pre .s { color: #8fd49a; }
+  pre .c { color: var(--faint); }
+
+  /* ---------- final cta ---------- */
+  .final {
+    text-align: center;
+    border: 1px solid var(--line); border-radius: 26px;
+    background:
+      radial-gradient(500px 300px at 50% 0%, rgba(255,106,61,0.16), transparent 70%),
+      linear-gradient(180deg, var(--panel-2), var(--panel));
+    padding: 64px 32px;
+  }
+  .final h2 { margin-bottom: 14px; }
+  .final p { color: var(--muted); max-width: 520px; margin: 0 auto 32px; font-size: 17px; }
+
+  /* ---------- footer ---------- */
+  footer {
+    border-top: 1px solid var(--line); padding: 40px 0;
+    color: var(--faint); font-size: 14px;
+  }
+  .foot-inner { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+  .foot-inner a { color: var(--muted); }
+  .foot-inner a:hover { color: var(--text); }
+  .kbd {
+    display: inline-block; padding: 2px 8px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--panel);
+    font-family: "JetBrains Mono", monospace; font-size: 12.5px; color: var(--text);
+    box-shadow: 0 2px 0 var(--line);
+  }
+</style>
+</head>
+<body>
+<div class="bg-orb"></div>
+<div class="content">
+
+  <nav id="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top"><img src="otto-icon.png" alt="Otto" /> Otto</a>
+      <div class="nav-links">
+        <a href="#how">How it works</a>
+        <a href="#learn">How it learns</a>
+        <a href="#privacy">Cost &amp; privacy</a>
+        <a href="https://github.com/slaymish/otto">GitHub</a>
+        <a class="btn" href="https://github.com/slaymish/otto/releases/latest">Download</a>
+      </div>
+    </div>
+  </nav>
+
+  <header id="top">
+    <div class="wrap">
+      <span class="pill"><span class="dot"></span> Native macOS · Swift · no runtime deps</span>
+      <br />
+      <img class="hero-icon" src="otto-icon.png" alt="Otto app icon" />
+      <h1>The Mac assistant<br />that <span class="grad">learns how you work.</span></h1>
+      <p class="lede">Summon Otto with a keystroke. Say what you want — <strong>"open Spotify," "cut here," "what's on my screen?"</strong> — and it does it. No chat window. No context-switching.</p>
+      <p class="sub-note">After each session it reflects on what worked and quietly rewrites its own memory. The more you use it, the better it fits.</p>
+      <div class="hero-cta">
+        <a class="btn" href="https://github.com/slaymish/otto/releases/latest">⬇ Download for macOS</a>
+        <a class="btn ghost" href="#how">See how it works</a>
+      </div>
+
+      <div class="demo" aria-hidden="true">
+        <div class="demo-bar">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span class="title">⌥Space — Otto command palette</span>
+        </div>
+        <div class="demo-body">
+          <div class="turn you"><div class="who">You</div><div class="msg">"put on some lo-fi and open my editor"</div></div>
+          <div class="turn otto"><div class="who">Otto</div><div class="msg">On it.<span class="act">→ <span class="mono">run_applescript</span> · Spotify search + play<br />→ <span class="mono">run_applescript</span> · activate Premiere Pro</span></div></div>
+          <div class="turn you"><div class="who">You</div><div class="msg">"cut here and step back a frame"</div></div>
+          <div class="turn otto"><div class="who">Otto</div><div class="msg">Done — and I learned that one.<span class="act">→ <span class="mono">press_key</span> ⌘K, ←  ·  saved to your capability library</span></div></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- HOW IT WORKS -->
+  <section id="how">
+    <div class="wrap">
+      <div class="eyebrow">How it works</div>
+      <h2>Five primitives. No hardcoded rules.</h2>
+      <p class="section-lede">Otto exposes five low-level actions to the model. Every command you give resolves to one of them. There's no rigid command list — Otto retrieves the most relevant capability templates and hands them to the model as recipes to fill in.</p>
+
+      <div class="grid">
+        <div class="card">
+          <div class="top"><div class="ic">📜</div><code>run_applescript</code></div>
+          <p>Runs AppleScript in-process to drive any scriptable Mac app.</p>
+        </div>
+        <div class="card">
+          <div class="top"><div class="ic">⌨️</div><code>press_key</code></div>
+          <p>Sends real keystrokes via CGEvent — shortcuts, combos, repeats.</p>
+        </div>
+        <div class="card">
+          <div class="top"><div class="ic">👁️</div><code>read_screen</code></div>
+          <p>Reads the accessibility tree of the focused app to see what's there.</p>
+        </div>
+        <div class="card">
+          <div class="top"><div class="ic">🌐</div><code>open_url</code></div>
+          <p>Opens a URL in your browser of choice.</p>
+        </div>
+        <div class="card">
+          <div class="top"><div class="ic">🎥</div><code>obs_call</code></div>
+          <p>Drives OBS Studio over its WebSocket for streaming &amp; recording.</p>
+        </div>
+        <div class="card" style="display:flex;align-items:center;justify-content:center;text-align:center;background:var(--bg-soft);">
+          <p style="color:var(--faint)">…and a growing library of <strong style="color:var(--accent-2)">capability templates</strong> built on top of them.</p>
+        </div>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="num">01</div>
+          <h3>Summon</h3>
+          <p>Hit <span class="kbd">⌥ Space</span>. Type a command, or hold the mic and talk.</p>
+        </div>
+        <div class="step">
+          <div class="num">02</div>
+          <h3>Retrieve</h3>
+          <p>Otto finds the most relevant capabilities for what you said and gives them to the model.</p>
+        </div>
+        <div class="step">
+          <div class="num">03</div>
+          <h3>Act</h3>
+          <p>The model fills in a primitive and Otto runs it — keystrokes, scripts, the works.</p>
+        </div>
+        <div class="step">
+          <div class="num">04</div>
+          <h3>Reflect</h3>
+          <p>Afterwards it reviews the session and updates its memory for next time.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT LEARNS -->
+  <section id="learn">
+    <div class="wrap">
+      <div class="eyebrow">How it learns</div>
+      <h2>It rewrites its own memory.</h2>
+      <p class="section-lede">You never train Otto explicitly. After each session it runs a lightweight retrospective, looks at what you said and what actually worked, and folds your phrasing into its capability library — local to your machine.</p>
+
+      <div class="flow">
+        <div class="flow-row">
+          <div class="stage">During</div>
+          <div class="desc">Every turn is logged as a structured event — what you asked, which primitive ran, what happened.</div>
+        </div>
+        <div class="flow-row">
+          <div class="stage">After</div>
+          <div class="desc">A cheap <strong>gpt-4o-mini</strong> pass (or a local Ollama model) reviews the session and extracts reusable patterns.</div>
+        </div>
+        <div class="flow-row">
+          <div class="stage">Learned</div>
+          <div class="desc">Your phrasing is added to an existing capability or becomes a new one in <strong>capabilities.user.json</strong>.</div>
+        </div>
+        <div class="flow-row">
+          <div class="stage">Next time</div>
+          <div class="desc">The way <strong>you</strong> say something lands instantly. Browse, edit, or undo anything from the journal — <span class="kbd">⌥ ⇧ Space</span>.</div>
+        </div>
+      </div>
+
+      <div class="note">💡 <strong>It compounds.</strong> Use Otto normally and it quietly gets better at fitting the exact way you work — no setup, no prompt engineering.</div>
+    </div>
+  </section>
+
+  <!-- PRIVACY -->
+  <section id="privacy">
+    <div class="wrap center">
+      <div class="eyebrow">Cost &amp; privacy</div>
+      <h2>Cheap to run. Yours to keep.</h2>
+      <p class="section-lede">Otto only listens when you ask it to, and everything it learns stays on your machine.</p>
+      <div class="stats" style="text-align:left">
+        <div class="stat">
+          <div class="big grad">$0</div>
+          <p><strong style="color:var(--text)">Idle.</strong> Audio is only sent when you trigger a command — nothing streams in the background.</p>
+        </div>
+        <div class="stat">
+          <div class="big grad">¢</div>
+          <p><strong style="color:var(--text)">A few cents per command.</strong> Realtime model for live turns, cheap mini model for the retrospective.</p>
+        </div>
+        <div class="stat">
+          <div class="big grad">100%</div>
+          <p><strong style="color:var(--text)">Local memory.</strong> Session logs and learned capabilities live only on your Mac.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- EXTEND -->
+  <section id="extend">
+    <div class="wrap">
+      <div class="eyebrow">Extend it</div>
+      <h2>Add your own capabilities.</h2>
+      <p class="section-lede">Capabilities are plain JSON. Drop a new one in, restart, and Otto can do it — with the same retrieve-and-fill flow as everything else.</p>
+      <pre><span class="c">// memory/capabilities.json</span>
+{
+  <span class="k">"id"</span>: <span class="s">"spotify-play"</span>,
+  <span class="k">"description"</span>: <span class="s">"Play music in Spotify"</span>,
+  <span class="k">"examples"</span>: [<span class="s">"play Spotify"</span>, <span class="s">"start music"</span>, <span class="s">"resume playback"</span>],
+  <span class="k">"primitive"</span>: <span class="s">"run_applescript"</span>,
+  <span class="k">"template"</span>: <span class="s">"tell application \"Spotify\" to play"</span>,
+  <span class="k">"required_apps"</span>: [<span class="s">"Spotify"</span>]
+}</pre>
+      <p class="section-lede" style="margin-top:22px"><code style="color:var(--accent-2)">required_apps</code> keeps a capability out of the index unless one of the listed apps is actually installed.</p>
+    </div>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section>
+    <div class="wrap">
+      <div class="final">
+        <img class="hero-icon" style="width:80px;height:80px;animation:none;margin-bottom:20px" src="otto-icon.png" alt="" />
+        <h2>Try Otto.</h2>
+        <p>A single native Mac app — no Python, no Node, no runtime dependencies. Bring an OpenAI API key with Realtime access and you're set.</p>
+        <div class="hero-cta">
+          <a class="btn" href="https://github.com/slaymish/otto/releases/latest">⬇ Download the latest release</a>
+          <a class="btn ghost" href="https://github.com/slaymish/otto">View source on GitHub</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap foot-inner">
+      <div>© 2026 Otto · MIT licensed</div>
+      <div style="display:flex;gap:22px">
+        <a href="https://github.com/slaymish/otto">GitHub</a>
+        <a href="https://github.com/slaymish/otto/releases/latest">Releases</a>
+        <a href="https://github.com/per-simmons/voice-os">A fork of voice-os</a>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  const nav = document.getElementById('nav');
+  const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 12);
+  onScroll();
+  window.addEventListener('scroll', onScroll, { passive: true });
+</script>
+</body>
+</html>
