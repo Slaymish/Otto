@@ -310,6 +310,26 @@ def test_prompt_builds_without_str_format_crash():
     assert '"id": "existing-or-new-slug"' in prompt
 
 
+def test_propose_updates_uses_injected_caller():
+    captured = {}
+
+    def fake_call(prompt, **kw):
+        captured["prompt"] = prompt
+        return json.dumps({"updates": [{"id": "x", "examples": ["hi"]}]})
+
+    turns = [{"query": "say hi", "name": "run_applescript", "args": {}, "result": {}}]
+    existing = [{"id": "x", "description": "d", "examples": ["hello"]}]
+    updates = r.propose_updates(turns, existing, call=fake_call)
+    assert updates == [{"id": "x", "examples": ["hi"]}]
+    assert "say hi" in captured["prompt"]
+    assert "[x]" in captured["prompt"]
+
+
+def test_propose_updates_empty_on_no_updates():
+    updates = r.propose_updates([], [], call=lambda p, **k: json.dumps({"updates": []}))
+    assert updates == []
+
+
 if __name__ == "__main__":
     # runnable without pytest
     import tempfile

@@ -82,6 +82,40 @@ SESSION LOG ('said' is what the user spoke; only successful commands shown):
 """
 
 
+def call_model(prompt: str, *, model: str = "gpt-4.1-mini", timeout: int = 30) -> str:
+    """POST the prompt to OpenAI chat completions; return the message content."""
+    import urllib.request
+
+    key = os.environ.get("OPENAI_API_KEY")
+    if not key:
+        raise RuntimeError("OPENAI_API_KEY not set")
+    body = json.dumps({
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "response_format": {"type": "json_object"},
+        "temperature": 0.4,
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=body,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = json.loads(resp.read())
+    return raw["choices"][0]["message"]["content"]
+
+
+def propose_updates(turns: list[dict], existing_view: list[dict], *, call=call_model) -> list[dict]:
+    """Build the retrospective prompt for these turns, call the model, parse updates."""
+    prompt = (
+        _RETROSPECTIVE_PROMPT
+        .replace("{existing}", _format_existing_for_prompt(existing_view))
+        .replace("{log}", _format_turns_for_prompt(turns))
+    )
+    content = call(prompt)
+    return _parse_updates(json.loads(content))
+
+
 def _strip_wake(text: str) -> str:
     return _WAKE_STRIP.sub("", text or "").strip()
 
@@ -140,13 +174,13 @@ def _load_caps(path: Path) -> list[dict]:
 
 
 def _load_user_caps() -> list[dict]:
-    return _load_caps(_USER_CAPS_PATH)
+    import learning_store
+    return learning_store.load_user_caps()
 
 
 def _save_user_caps(caps: list[dict]) -> None:
-    _USER_CAPS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(_USER_CAPS_PATH, "w") as f:
-        json.dump(caps, f, indent=2, ensure_ascii=False)
+    import learning_store
+    learning_store.save_user_caps(caps)
 
 
 def _merge_updates(
@@ -264,40 +298,11 @@ def run_retrospective(
     # user overrides builtin by id, for the "known capabilities" view
     existing_view = list({**builtin_by_id, **{c["id"]: c for c in user_caps}}.values())
 
-    # NB: plain .replace, not .format — the prompt contains literal { } in its
-    # JSON example, which str.format would try to parse as fields.
-    prompt = (
-        _RETROSPECTIVE_PROMPT
-        .replace("{existing}", _format_existing_for_prompt(existing_view))
-        .replace("{log}", _format_turns_for_prompt(turns))
-    )
-
     try:
-        import urllib.request
-
-        body = json.dumps({
-            "model": "gpt-4.1-mini",
-            "messages": [{"role": "user", "content": prompt}],
-            "response_format": {"type": "json_object"},
-            "temperature": 0.4,
-        }).encode()
-        req = urllib.request.Request(
-            "https://api.openai.com/v1/chat/completions",
-            data=body,
-            headers={
-                "Authorization": f"Bearer {key}",
-                "Content-Type": "application/json",
-            },
-        )
         t0 = time.monotonic()
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            raw = json.loads(resp.read())
+        updates = propose_updates(turns, existing_view)
         if verbose:
             print(f"[retrospective] LLM responded in {time.monotonic()-t0:.1f}s", flush=True)
-
-        content = raw["choices"][0]["message"]["content"]
-        updates = _parse_updates(json.loads(content))
-
     except Exception as e:  # noqa: BLE001
         print(f"[retrospective] LLM call failed: {e}", flush=True)
         return 0
