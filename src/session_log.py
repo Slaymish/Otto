@@ -16,12 +16,14 @@ Event types:
 from __future__ import annotations
 
 import json
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-# src/ lives one level under the project root; memory/ sits at the root.
-_SESSIONS_DIR = Path(__file__).resolve().parent.parent / "memory" / "sessions"
+# Redirect to OTTO_DATA_DIR when running from a bundled app (read-only bundle).
+_DATA_ROOT    = Path(os.environ.get("OTTO_DATA_DIR", str(Path(__file__).resolve().parent.parent)))
+_SESSIONS_DIR = _DATA_ROOT / "memory" / "sessions"
 
 
 class SessionLog:

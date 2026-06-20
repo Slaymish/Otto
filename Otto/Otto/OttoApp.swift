@@ -21,18 +21,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyManager: HotkeyManager?
     private var pythonProcess: Process?
     private var stdoutPipe: Pipe?
+    private var onboardingWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("[Otto] app started")
-        NSApp.setActivationPolicy(.accessory)
 
+        // Show first-run onboarding only when running from the installed bundle.
+        if resourcesHaveBackend && !SettingsStore.shared.isConfigured {
+            NSApp.setActivationPolicy(.regular)
+            showOnboarding()
+        } else {
+            NSApp.setActivationPolicy(.accessory)
+            startMainApp()
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        pythonProcess?.terminate()
+    }
+
+    // MARK: - Onboarding
+
+    private func showOnboarding() {
+        let view = OnboardingView {
+            DispatchQueue.main.async {
+                self.onboardingWindow?.orderOut(nil)
+                self.onboardingWindow = nil
+                NSApp.setActivationPolicy(.accessory)
+                self.startMainApp()
+            }
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 440),
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Set Up Otto"
+        window.contentView = NSHostingView(rootView: view)
+        window.center()
+        onboardingWindow = window
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    // MARK: - Main app startup
+
+    private func startMainApp() {
         paletteController = PaletteController(bridge: bridge)
         journalController = JournalController(bridge: bridge)
 
-        // Wire the palette "Edit" button → journal window.
         paletteController?.onOpenJournal = { [weak self] in self?.journalController?.show() }
 
-        // ⌥Space  (id: 1) — palette
         hotkeyManager = HotkeyManager(onToggle: { [weak self] in
             self?.paletteController?.toggle()
         })
@@ -41,44 +81,94 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         launchPython()
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        pythonProcess?.terminate()
-    }
-
     // MARK: - Python subprocess
 
+    /// True when src/voice_agent.py is bundled inside Contents/Resources (installed app).
+    private var resourcesHaveBackend: Bool {
+        guard let resources = Bundle.main.resourceURL else { return false }
+        return FileManager.default.fileExists(
+            atPath: resources.appendingPathComponent("src/voice_agent.py").path)
+    }
+
+    private var appSupportDir: URL {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return support.appendingPathComponent("Otto")
+    }
+
     private func launchPython() {
-        guard let root = findProjectRoot() else {
-            print("[Otto] ERROR: could not locate project root — set OTTO_PROJECT_ROOT env var.")
-            return
-        }
-        print("[Otto] project root: \(root.path)")
+        let isBundled = resourcesHaveBackend
 
-        let venv = root.appendingPathComponent(".venv/bin/python3")
-        let fallback = root.appendingPathComponent(".venv/bin/python")
-        let python: URL
-        if FileManager.default.fileExists(atPath: venv.path) {
-            python = venv
-        } else if FileManager.default.fileExists(atPath: fallback.path) {
-            python = fallback
+        // Resolve the directory that contains src/ and memory/.
+        let scriptRoot: URL
+        let pythonURL: URL
+
+        if isBundled {
+            guard let resources = Bundle.main.resourceURL else {
+                print("[Otto] ERROR: no bundle resources URL")
+                return
+            }
+            scriptRoot = resources
+            let venv = appSupportDir.appendingPathComponent(".venv")
+            let py3  = venv.appendingPathComponent("bin/python3")
+            let py   = venv.appendingPathComponent("bin/python")
+            if FileManager.default.fileExists(atPath: py3.path) {
+                pythonURL = py3
+            } else if FileManager.default.fileExists(atPath: py.path) {
+                pythonURL = py
+            } else {
+                print("[Otto] ERROR: no venv python in \(venv.path) — run onboarding first")
+                return
+            }
         } else {
-            print("[Otto] ERROR: no .venv python found at \(root.path)")
-            return
+            // Dev mode: walk up from bundle to find the project root.
+            guard let root = findProjectRoot() else {
+                print("[Otto] ERROR: could not locate project root — set OTTO_PROJECT_ROOT env var.")
+                return
+            }
+            scriptRoot = root
+            let py3 = root.appendingPathComponent(".venv/bin/python3")
+            let py  = root.appendingPathComponent(".venv/bin/python")
+            if FileManager.default.fileExists(atPath: py3.path) {
+                pythonURL = py3
+            } else if FileManager.default.fileExists(atPath: py.path) {
+                pythonURL = py
+            } else {
+                print("[Otto] ERROR: no .venv python found at \(root.path)")
+                return
+            }
         }
-        print("[Otto] launching python: \(python.path)")
 
-        let script = root.appendingPathComponent("src/voice_agent.py")
+        print("[Otto] script root: \(scriptRoot.path)")
+        print("[Otto] python:      \(pythonURL.path)")
+
+        let script = scriptRoot.appendingPathComponent("src/voice_agent.py")
         let process = Process()
-        process.executableURL = python
+        process.executableURL = pythonURL
         process.arguments = [script.path, "--ipc"]
-        process.currentDirectoryURL = root
+        process.currentDirectoryURL = scriptRoot
 
-        // Inherit environment; merge .env so OPENAI_API_KEY is available even when
-        // the app is launched via Finder or open(1) which don't inherit shell env vars.
         var env = ProcessInfo.processInfo.environment
         env["PYTHONUNBUFFERED"] = "1"
-        for (key, value) in loadDotEnv(root: root) where env[key] == nil {
-            env[key] = value
+
+        if isBundled {
+            // Tell Python where to write user data (capabilities, sessions, embeddings).
+            env["OTTO_DATA_DIR"] = appSupportDir.path
+            // Inject settings saved during onboarding (Keychain / UserDefaults).
+            for (k, v) in SettingsStore.shared.asEnvironment() where env[k] == nil {
+                env[k] = v
+            }
+            // Power-user override: .env in Application Support takes precedence.
+            for (k, v) in loadDotEnv(root: appSupportDir) {
+                env[k] = v
+            }
+        } else {
+            // Dev mode: merge .env from project root, then settings store as fallback.
+            for (k, v) in loadDotEnv(root: scriptRoot) where env[k] == nil {
+                env[k] = v
+            }
+            for (k, v) in SettingsStore.shared.asEnvironment() where env[k] == nil {
+                env[k] = v
+            }
         }
         process.environment = env
 
@@ -123,7 +213,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Reads KEY=VALUE pairs from <root>/.env; ignores comments and blank lines.
-    /// Quoted values have their surrounding single/double quotes stripped.
     private func loadDotEnv(root: URL) -> [String: String] {
         let file = root.appendingPathComponent(".env")
         guard let raw = try? String(contentsOf: file, encoding: .utf8) else { return [:] }
@@ -131,12 +220,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for line in raw.components(separatedBy: "\n") {
             var s = line.trimmingCharacters(in: .whitespaces)
             guard !s.isEmpty, !s.hasPrefix("#") else { continue }
-            // Strip optional leading `export `
             if s.hasPrefix("export ") { s = String(s.dropFirst(7)) }
             guard let eq = s.firstIndex(of: "=") else { continue }
             let key = String(s[..<eq]).trimmingCharacters(in: .whitespaces)
             var val = String(s[s.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
-            // Strip surrounding quotes
             if (val.hasPrefix("\"") && val.hasSuffix("\"")) ||
                (val.hasPrefix("'") && val.hasSuffix("'")) {
                 val = String(val.dropFirst().dropLast())

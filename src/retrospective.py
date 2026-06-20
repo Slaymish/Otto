@@ -29,8 +29,11 @@ from session_log import SessionLog
 
 # src/ lives one level under the project root; memory/ sits at the root.
 _MEMORY_DIR = Path(__file__).resolve().parent.parent / "memory"
-_USER_CAPS_PATH = _MEMORY_DIR / "capabilities.user.json"
 _BUILTIN_CAPS_PATH = _MEMORY_DIR / "capabilities.json"
+
+# Redirect write paths to OTTO_DATA_DIR when running from a bundled app.
+_DATA_DIR = Path(os.environ.get("OTTO_DATA_DIR", str(_MEMORY_DIR.parent)))
+_USER_CAPS_PATH = _DATA_DIR / "memory" / "capabilities.user.json"
 
 # Strips a leading wake word ("hey chat, ...") so learned phrasings match the
 # wake-word-free style of the builtin examples used at retrieval time.

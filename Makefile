@@ -17,7 +17,10 @@ SOURCES := \
 	Otto/Otto/HotkeyManager.swift  \
 	Otto/Otto/PythonBridge.swift   \
 	Otto/Otto/WaveformView.swift   \
-	Otto/Otto/JournalWindow.swift
+	Otto/Otto/JournalWindow.swift  \
+	Otto/Otto/SettingsStore.swift  \
+	Otto/Otto/SetupEngine.swift    \
+	Otto/Otto/OnboardingView.swift
 
 APP       := Otto/build/Otto.app
 BINARY    := $(APP)/Contents/MacOS/Otto
@@ -27,9 +30,9 @@ ENTITLE   := Otto/Otto/Otto.entitlements
 ICON_SRC  := Otto/Otto/AppIcon.icns
 ICON_DST  := $(APP)/Contents/Resources/AppIcon.icns
 
-.PHONY: app clean
+.PHONY: app bundle-resources pkg clean
 
-app: $(BINARY) $(PLIST_DST) $(ICON_DST)
+app: $(BINARY) $(PLIST_DST) $(ICON_DST) bundle-resources
 	codesign --force --sign - --entitlements "$(ENTITLE)" "$(APP)"
 	@echo "✓  $(APP)"
 

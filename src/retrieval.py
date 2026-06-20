@@ -27,12 +27,16 @@ import numpy as np
 
 import config
 
-# src/ lives one level under the project root; memory/ sits at the root.
+# src/ lives one level under the project root (or bundle Resources/); memory/ sits there too.
 _ROOT = Path(__file__).resolve().parent.parent
 _CAPABILITIES_PATH = _ROOT / "memory" / "capabilities.json"
-_USER_CAPABILITIES_PATH = _ROOT / "memory" / "capabilities.user.json"
-_EMBED_CACHE = _ROOT / "memory" / "embeddings.npy"
-_EMBED_IDS_CACHE = _ROOT / "memory" / "embedding_ids.json"
+
+# Write paths: redirect to OTTO_DATA_DIR when running from a bundled app so the
+# app bundle remains read-only after installation.
+_DATA_ROOT = Path(os.environ.get("OTTO_DATA_DIR", str(_ROOT)))
+_USER_CAPABILITIES_PATH = _DATA_ROOT / "memory" / "capabilities.user.json"
+_EMBED_CACHE            = _DATA_ROOT / "memory" / "embeddings.npy"
+_EMBED_IDS_CACHE        = _DATA_ROOT / "memory" / "embedding_ids.json"
 
 _MODEL_NAME = config.env("EMBED_MODEL", "all-MiniLM-L6-v2")
 
