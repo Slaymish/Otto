@@ -54,7 +54,7 @@ struct CapabilityHalo: View {
     /// Distribute chips evenly around the circle, starting at the top.
     private func offset(for index: Int, of count: Int) -> CGSize {
         guard count > 0 else { return .zero }
-        let angle = -Double.pi / 2 + (Double(index) / Double(count)) * 2 * .pi
+        let angle = -CGFloat.pi / 2 + (CGFloat(index) / CGFloat(count)) * 2 * .pi
         return CGSize(width: cos(angle) * radius, height: sin(angle) * radius)
     }
 }
