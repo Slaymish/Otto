@@ -66,7 +66,9 @@ final class OttoEngine {
 
         var req = URLRequest(url: wsURL)
         req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        req.setValue("realtime=v1", forHTTPHeaderField: "OpenAI-Beta")
+        // GA Realtime API: the beta `OpenAI-Beta: realtime=v1` header is rejected
+        // ("The Realtime Beta API is no longer supported. Please use /v1/realtime
+        // for the GA API."), so it must NOT be sent.
 
         let ws = urlSession.webSocketTask(with: req)
         currentWS = ws
@@ -351,13 +353,15 @@ final class OttoEngine {
     // MARK: - Commands
 
     func sendVoiceStart() {
+        // Set listening immediately so mic frames flow (and the waveform shows a
+        // live level) even if the WebSocket hasn't finished connecting yet.
+        isListening = true
         guard let ws = currentWS else { return }
         if isSpeaking {
             ws.cancel(with: .normalClosure, reason: Data("interrupt".utf8))
             audio.stopPlayback()
             isSpeaking = false
         }
-        isListening = true
         Task { try? await sendJSON(ws, ["type": "input_audio_buffer.clear"]) }
     }
 

@@ -53,8 +53,10 @@ struct CommandPalette: View {
         .animation(.spring(duration: 0.28, bounce: 0.08), value: bridge.lastError)
         .animation(.spring(duration: 0.28, bounce: 0.08), value: bridge.learnedEvent)
         .animation(.spring(duration: 0.22, bounce: 0.05), value: showSuggestions)
-        .background { paletteBackground }
-        .shadow(color: .black.opacity(0.22), radius: 28, y: 10)
+        // Orb mode is just the orb (it has its own circular background); the
+        // rounded-rect chrome + shadow apply only to the bar.
+        .background { if !isOrbMode { paletteBackground } }
+        .shadow(color: .black.opacity(isOrbMode ? 0 : 0.22), radius: 28, y: 10)
         .padding(1) // prevent shadow clipping
         .onKeyPress(.escape) { stopListening(); onDismiss(); return .handled }
         .onAppear { textFieldFocused = true; startListeningIfEnabled() }
