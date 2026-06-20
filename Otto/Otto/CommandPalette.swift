@@ -27,8 +27,7 @@ private let resultLingerSeconds: UInt64 = 8
 /// The floating command palette — text field + hold-to-talk mic button + waveform + result.
 /// Hosted in a borderless `CommandPanel` by `PaletteController`.
 struct CommandPalette: View {
-    // any OttoBridge — tracks both PythonBridge and OttoEngine via Observable existential.
-    var bridge: any OttoBridge
+    var bridge: OttoEngine
     var onDismiss: () -> Void = {}
     var onOpenJournal: () -> Void = {}
 
@@ -580,12 +579,12 @@ final class CommandPanel: NSPanel {
 final class PaletteController: NSObject, NSWindowDelegate {
     private var panel: CommandPanel?
     private var hostingController: NSHostingController<CommandPalette>?
-    private let bridge: any OttoBridge
+    private let bridge: OttoEngine
     /// Set by AppDelegate after both controllers exist; forwarded into CommandPalette
     /// so the "Edit" button in the learned-nudge chip can open the journal window.
     var onOpenJournal: () -> Void = {}
 
-    init(bridge: any OttoBridge) {
+    init(bridge: OttoEngine) {
         self.bridge = bridge
         super.init()
     }

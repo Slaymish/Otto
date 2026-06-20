@@ -6,11 +6,12 @@ import AppKit
 /// Manages the "Otto — Journal" window: a standard resizable NSWindow showing
 /// every capability Otto knows, with edit/delete affordances for learned entries.
 /// Opened by ⌥⇧Space or the "Edit" button in the learned-nudge chip.
+@MainActor
 final class JournalController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
-    private let bridge: any OttoBridge
+    private let bridge: OttoEngine
 
-    init(bridge: any OttoBridge) {
+    init(bridge: OttoEngine) {
         self.bridge = bridge
         super.init()
     }
@@ -50,7 +51,7 @@ final class JournalController: NSObject, NSWindowDelegate {
 // MARK: - Journal view
 
 struct JournalView: View {
-    var bridge: any OttoBridge
+    var bridge: OttoEngine
 
     var body: some View {
         VStack(spacing: 0) {
@@ -119,7 +120,7 @@ struct JournalView: View {
 
 struct JournalCardRow: View {
     let card: JournalCard
-    var bridge: any OttoBridge
+    var bridge: OttoEngine
 
     @State private var isEditing = false
     @State private var editDesc = ""

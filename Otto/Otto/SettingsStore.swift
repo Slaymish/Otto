@@ -57,16 +57,6 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    /// Env vars to inject into the Python subprocess.
-    func asEnvironment() -> [String: String] {
-        var env: [String: String] = [:]
-        if !openAIKey.isEmpty   { env["OPENAI_API_KEY"]  = openAIKey }
-        if !userName.isEmpty    { env["OTTO_USER_NAME"]  = userName }
-        if !micName.isEmpty     { env["OTTO_MIC"]        = micName }
-        if !browserName.isEmpty { env["OTTO_BROWSER"]    = browserName }
-        return env
-    }
-
     // MARK: - Keychain
 
     private func keychainRead(account: String) -> String? {

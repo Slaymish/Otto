@@ -23,7 +23,6 @@ SOURCES := \
 	Otto/Otto/HotkeyManager.swift  \
 	Otto/Otto/MenuBarController.swift \
 	Otto/Otto/OttoBridge.swift     \
-	Otto/Otto/PythonBridge.swift   \
 	Otto/Otto/AudioEngine.swift    \
 	Otto/Otto/ActionEngine.swift   \
 	Otto/Otto/OttoEngine.swift     \
@@ -31,7 +30,6 @@ SOURCES := \
 	Otto/Otto/JournalWindow.swift  \
 	Otto/Otto/SettingsStore.swift  \
 	Otto/Otto/SettingsWindow.swift \
-	Otto/Otto/SetupEngine.swift    \
 	Otto/Otto/OnboardingView.swift \
 	Otto/Otto/HotkeyConfig.swift   \
 	Otto/Otto/HotkeyRecorderView.swift \
@@ -81,15 +79,12 @@ $(ICON_DST): $(ICON_SRC) | $(APP)/Contents/Resources
 $(APP)/Contents/MacOS $(APP)/Contents $(APP)/Contents/Resources:
 	mkdir -p "$@"
 
-# Copy the Python backend and read-only capabilities into the bundle.
-# Write-path data (user caps, embeddings, sessions) goes to ~/Library/Application Support/Otto
-# at runtime via OTTO_DATA_DIR; only the static files belong in the bundle.
+# Copy read-only capabilities into the bundle.
+# Write-path data (user caps, sessions) goes to ~/Library/Application Support/Otto at runtime.
 bundle-resources: | $(APP)/Contents/Resources
-	rm -rf "$(APP)/Contents/Resources/src" "$(APP)/Contents/Resources/memory"
-	cp -R src "$(APP)/Contents/Resources/src"
+	rm -rf "$(APP)/Contents/Resources/memory"
 	mkdir -p "$(APP)/Contents/Resources/memory"
 	cp memory/capabilities.json "$(APP)/Contents/Resources/memory/capabilities.json"
-	cp requirements.txt "$(APP)/Contents/Resources/requirements.txt"
 
 # Create an installer PKG that drops Otto.app into /Applications.
 # In CI, rename the output to Otto-<tag>.pkg before uploading.

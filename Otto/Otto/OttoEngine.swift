@@ -1,14 +1,11 @@
 import Foundation
 import Observation
 
-/// Native Swift engine that replaces the Python IPC backend when launched with
-/// --swift-engine. Publishes exactly the same observable state as PythonBridge
-/// so that all SwiftUI views work without modification.
 @MainActor
 @Observable
-final class OttoEngine: @preconcurrency OttoBridge {
+final class OttoEngine {
 
-    // MARK: - Published state (mirrors PythonBridge exactly)
+    // MARK: - Published state
     var micLevel: Float = 0
     var waveformActive = false
     var transcript = ""
@@ -41,7 +38,7 @@ final class OttoEngine: @preconcurrency OttoBridge {
 
     init() {
         let env = ProcessInfo.processInfo.environment
-        self.apiKey = env["OPENAI_API_KEY"] ?? ""
+        self.apiKey = env["OPENAI_API_KEY"] ?? SettingsStore.shared.openAIKey
         self.model  = env["OTTO_MODEL"] ?? "gpt-realtime-2"
     }
 
@@ -375,10 +372,10 @@ final class OttoEngine: @preconcurrency OttoBridge {
         }
     }
 
-    // Journal / suggestions — powered by Python sidecar in Phase 01; stubbed here
-    func requestJournal()    { /* Phase 04 */ }
-    func requestSuggestions(){ /* Phase 04 */ }
-    func undoLearning(_ id: String)         { /* Phase 04 */ }
-    func deleteCapability(_ id: String)     { /* Phase 04 */ }
-    func editCapability(_ id: String, description: String?, examples: [String]?) { /* Phase 04 */ }
+    // Journal / suggestions — stubbed; wired in Phase 04
+    func requestJournal()    {}
+    func requestSuggestions(){}
+    func undoLearning(_ id: String)         {}
+    func deleteCapability(_ id: String)     {}
+    func editCapability(_ id: String, description: String?, examples: [String]?) {}
 }

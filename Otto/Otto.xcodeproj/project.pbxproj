@@ -10,11 +10,9 @@
 		AA000002000000000000001A /* OttoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000001A /* OttoApp.swift */; };
 		AA000002000000000000002B /* CommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000002B /* CommandPalette.swift */; };
 		AA000002000000000000003C /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000003C /* WaveformView.swift */; };
-		AA000002000000000000004D /* PythonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000004D /* PythonBridge.swift */; };
 		AA000002000000000000005E /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000005E /* HotkeyManager.swift */; };
 		AA000002000000000000009C /* JournalWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000009C /* JournalWindow.swift */; };
 		AA00000200000000000000A1 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000A1 /* SettingsStore.swift */; };
-		AA00000200000000000000A2 /* SetupEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000A2 /* SetupEngine.swift */; };
 		AA00000200000000000000A3 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000A3 /* OnboardingView.swift */; };
 		AA00000200000000000000A4 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000A4 /* MenuBarController.swift */; };
 		AA00000200000000000000A5 /* SettingsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000A5 /* SettingsWindow.swift */; };
@@ -25,7 +23,6 @@
 		AA00000200000000000000B4 /* OrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000B4 /* OrbView.swift */; };
 		AA00000200000000000000B5 /* CapabilityHalo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000B5 /* CapabilityHalo.swift */; };
 		AA00000F000000000000004D /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000001A /* AppKit.framework */; };
-		AA00000F000000000000005E /* Network.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000002B /* Network.framework */; };
 		AA00000F000000000000006F /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000003C /* Carbon.framework */; };
 		AA00000200000000000000C0 /* OttoBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000C0 /* OttoBridge.swift */; };
 		AA00000200000000000000C1 /* AudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000C1 /* AudioEngine.swift */; };
@@ -38,11 +35,9 @@
 		AA000001000000000000001A /* OttoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttoApp.swift; sourceTree = "<group>"; };
 		AA000001000000000000002B /* CommandPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPalette.swift; sourceTree = "<group>"; };
 		AA000001000000000000003C /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
-		AA000001000000000000004D /* PythonBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonBridge.swift; sourceTree = "<group>"; };
 		AA000001000000000000005E /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		AA000001000000000000009C /* JournalWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalWindow.swift; sourceTree = "<group>"; };
 		AA00000100000000000000A1 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
-		AA00000100000000000000A2 /* SetupEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupEngine.swift; sourceTree = "<group>"; };
 		AA00000100000000000000A3 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		AA00000100000000000000A4 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
 		AA00000100000000000000A5 /* SettingsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindow.swift; sourceTree = "<group>"; };
@@ -56,7 +51,6 @@
 		AA000001000000000000007A /* Otto.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Otto.entitlements; sourceTree = "<group>"; };
 		AA000001000000000000008B /* Otto.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Otto.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA00000F000000000000001A /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
-		AA00000F000000000000002B /* Network.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Network.framework; path = System/Library/Frameworks/Network.framework; sourceTree = SDKROOT; };
 		AA00000F000000000000003C /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
 		AA00000100000000000000C0 /* OttoBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttoBridge.swift; sourceTree = "<group>"; };
 		AA00000100000000000000C1 /* AudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngine.swift; sourceTree = "<group>"; };
@@ -71,7 +65,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000F000000000000004D /* AppKit.framework in Frameworks */,
-				AA00000F000000000000005E /* Network.framework in Frameworks */,
 				AA00000F000000000000006F /* Carbon.framework in Frameworks */,
 				AA00000F00000000000000C1 /* AVFoundation.framework in Frameworks */,
 			);
@@ -95,11 +88,9 @@
 				AA000001000000000000001A /* OttoApp.swift */,
 				AA000001000000000000002B /* CommandPalette.swift */,
 				AA000001000000000000003C /* WaveformView.swift */,
-				AA000001000000000000004D /* PythonBridge.swift */,
 				AA000001000000000000005E /* HotkeyManager.swift */,
 				AA000001000000000000009C /* JournalWindow.swift */,
 				AA00000100000000000000A1 /* SettingsStore.swift */,
-				AA00000100000000000000A2 /* SetupEngine.swift */,
 				AA00000100000000000000A3 /* OnboardingView.swift */,
 				AA00000100000000000000A4 /* MenuBarController.swift */,
 				AA00000100000000000000A5 /* SettingsWindow.swift */,
@@ -131,7 +122,6 @@
 			isa = PBXGroup;
 			children = (
 				AA00000F000000000000001A /* AppKit.framework */,
-				AA00000F000000000000002B /* Network.framework */,
 				AA00000F000000000000003C /* Carbon.framework */,
 				AA00000F00000000000000C0 /* AVFoundation.framework */,
 			);
@@ -204,11 +194,9 @@
 				AA000002000000000000001A /* OttoApp.swift in Sources */,
 				AA000002000000000000002B /* CommandPalette.swift in Sources */,
 				AA000002000000000000003C /* WaveformView.swift in Sources */,
-				AA000002000000000000004D /* PythonBridge.swift in Sources */,
 				AA000002000000000000005E /* HotkeyManager.swift in Sources */,
 				AA000002000000000000009C /* JournalWindow.swift in Sources */,
 				AA00000200000000000000A1 /* SettingsStore.swift in Sources */,
-				AA00000200000000000000A2 /* SetupEngine.swift in Sources */,
 				AA00000200000000000000A3 /* OnboardingView.swift in Sources */,
 				AA00000200000000000000A4 /* MenuBarController.swift in Sources */,
 				AA00000200000000000000A5 /* SettingsWindow.swift in Sources */,

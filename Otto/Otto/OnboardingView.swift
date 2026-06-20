@@ -4,27 +4,8 @@ struct OnboardingView: View {
     let onComplete: () -> Void
 
     @ObservedObject private var store = SettingsStore.shared
-    @StateObject  private var setup = SetupEngine()
     @State private var page = 0
     @State private var showKey = false
-
-    private var dataDir: URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return support.appendingPathComponent("Otto")
-    }
-
-    private var requirementsURL: URL? {
-        // Bundle mode: resources are in Contents/Resources/
-        if let url = Bundle.main.url(forResource: "requirements", withExtension: "txt") { return url }
-        // Dev mode fallback: walk up from bundle to project root
-        var url = Bundle.main.bundleURL
-        for _ in 0..<8 {
-            url = url.deletingLastPathComponent()
-            let candidate = url.appendingPathComponent("requirements.txt")
-            if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
-        }
-        return nil
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -45,7 +26,6 @@ struct OnboardingView: View {
         case 0: welcomePage
         case 1: apiKeyPage
         case 2: preferencesPage
-        case 3: installingPage
         default: donePage
         }
     }
@@ -109,7 +89,7 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 20) {
             Text("Preferences")
                 .font(.title2.bold())
-            Text("All optional — you can change these any time by editing ~/Library/Application\u{00A0}Support/Otto/.env.")
+            Text("All optional — you can change these any time in Settings.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -122,51 +102,6 @@ struct OnboardingView: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private var installingPage: some View {
-        VStack(spacing: 24) {
-            switch setup.phase {
-            case .done:
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 48))
-                    .foregroundStyle(.green)
-                Text("Environment ready")
-                    .font(.title3.bold())
-
-            case .failed(let msg):
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 48))
-                    .foregroundStyle(.red)
-                Text("Setup failed")
-                    .font(.title3.bold())
-                Text(msg)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-
-            default:
-                ProgressView()
-                    .scaleEffect(1.5)
-                Text(setup.statusLine.isEmpty ? "Preparing…" : setup.statusLine)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(width: 340)
-            }
-        }
-        .padding(40)
-        .task {
-            guard setup.phase == .idle, let req = requirementsURL else { return }
-            await setup.run(dataDir: dataDir, requirementsURL: req)
-        }
-        .onChange(of: setup.phase) { _, newPhase in
-            if newPhase == .done {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { page = 4 }
-            }
-        }
     }
 
     private var donePage: some View {
@@ -216,23 +151,14 @@ struct OnboardingView: View {
             .disabled(store.openAIKey.trimmingCharacters(in: .whitespaces).isEmpty)
 
         case 2:
-            Button("Set Up Otto →") { page = 3 }
-                .buttonStyle(.borderedProminent)
-
-        case 3:
-            if case .failed = setup.phase {
-                Button("Retry") {
-                    Task {
-                        guard let req = requirementsURL else { return }
-                        await setup.run(dataDir: dataDir, requirementsURL: req)
-                    }
-                }
-                .buttonStyle(.borderedProminent)
+            Button("Set Up Otto →") {
+                store.save()
+                page = 3
             }
+            .buttonStyle(.borderedProminent)
 
         default:
             Button("Launch Otto") {
-                store.save()
                 onComplete()
             }
             .buttonStyle(.borderedProminent)
