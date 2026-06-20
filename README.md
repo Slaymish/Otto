@@ -23,14 +23,11 @@ The more you use it, the better it fits.
 
 ## Quickstart
 
-**Requirements** — a Mac, Xcode Command Line Tools (`xcode-select --install`), and an **OpenAI API key with Realtime access**.
+**[⬇ Download the latest release](https://github.com/slaymish/otto/releases/latest)**, open the `.pkg`, and launch Otto.
 
-```bash
-make app                  # build → Otto/build/Otto.app (no full Xcode needed)
-open Otto/build/Otto.app  # launch
-```
+You'll need a Mac (macOS 14+) and an **OpenAI API key with Realtime access**. On first run, onboarding asks for your key (stored in the Keychain). Otto then lives in the menu bar — no Dock icon.
 
-On first run, onboarding asks for your OpenAI API key (stored in the Keychain). Otto then lives in the menu bar — no Dock icon.
+> Prefer to build from source? See [Build & test](#build--test).
 
 | Shortcut | Action |
 |---|---|
