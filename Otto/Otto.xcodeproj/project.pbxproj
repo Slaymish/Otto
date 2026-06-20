@@ -23,6 +23,7 @@
 		AA00000200000000000000B3 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000B3 /* UpdateChecker.swift */; };
 		AA00000200000000000000B6 /* CapabilityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000B6 /* CapabilityKind.swift */; };
 		AA00000200000000000000B4 /* OrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000B4 /* OrbView.swift */; };
+		AA00000200000000000000B5 /* CapabilityHalo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000B5 /* CapabilityHalo.swift */; };
 		AA00000F000000000000004D /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000001A /* AppKit.framework */; };
 		AA00000F000000000000005E /* Network.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000002B /* Network.framework */; };
 		AA00000F000000000000006F /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000003C /* Carbon.framework */; };
@@ -45,6 +46,7 @@
 		AA00000100000000000000B3 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		AA00000100000000000000B6 /* CapabilityKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityKind.swift; sourceTree = "<group>"; };
 		AA00000100000000000000B4 /* OrbView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbView.swift; sourceTree = "<group>"; };
+		AA00000100000000000000B5 /* CapabilityHalo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityHalo.swift; sourceTree = "<group>"; };
 		AA000001000000000000006F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA000001000000000000007A /* Otto.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Otto.entitlements; sourceTree = "<group>"; };
 		AA000001000000000000008B /* Otto.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Otto.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -95,6 +97,7 @@
 				AA00000100000000000000B3 /* UpdateChecker.swift */,
 				AA00000100000000000000B6 /* CapabilityKind.swift */,
 				AA00000100000000000000B4 /* OrbView.swift */,
+				AA00000100000000000000B5 /* CapabilityHalo.swift */,
 				AA000001000000000000006F /* Info.plist */,
 				AA000001000000000000007A /* Otto.entitlements */,
 			);
@@ -198,6 +201,7 @@
 				AA00000200000000000000B3 /* UpdateChecker.swift in Sources */,
 				AA00000200000000000000B6 /* CapabilityKind.swift in Sources */,
 				AA00000200000000000000B4 /* OrbView.swift in Sources */,
+				AA00000200000000000000B5 /* CapabilityHalo.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
