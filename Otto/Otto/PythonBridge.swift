@@ -2,6 +2,33 @@ import Foundation
 import Network
 import Observation
 
+struct LearnedEvent: Equatable {
+    let id: String
+    let action: String      // "new_capability" | "added_phrasing"
+    let phrase: String
+    let description: String
+    let primitive: String
+}
+
+struct JournalHeader: Equatable {
+    let capabilities: Int
+    let learned: Int
+    let commands: Int
+}
+
+struct JournalCard: Identifiable, Equatable {
+    let id: String
+    let description: String
+    let examples: [String]
+    let primitive: String
+    let template: String
+    let origin: String       // "learned" | "shipped"
+    let learnedAt: String?
+    let timesUsed: Int
+    let lastUsed: String?
+    let confidence: Double
+}
+
 /// Manages the TCP connection to the Python backend and publishes state for the UI.
 @Observable
 final class PythonBridge {
@@ -13,11 +40,14 @@ final class PythonBridge {
     var spokenText = ""
     var isReady = false
     var lastError: String?
+    var learnedEvent: LearnedEvent?
+    var journalHeader: JournalHeader?
+    var journalCards: [JournalCard] = []
 
     // MARK: - Private
     private var connection: NWConnection?
     private var receiveBuffer = Data()
-    private let queue = DispatchQueue(label: "voiceos.ipc", qos: .userInteractive)
+    private let queue = DispatchQueue(label: "otto.ipc", qos: .userInteractive)
 
     // MARK: - Lifecycle
 
@@ -53,6 +83,16 @@ final class PythonBridge {
 
     func sendText(_ text: String) {
         send(["type": "text_input", "text": text])
+    }
+
+    func requestJournal() { send(["type": "request_journal"]) }
+    func undoLearning(_ id: String) { send(["type": "undo_learning", "id": id]) }
+    func deleteCapability(_ id: String) { send(["type": "delete_capability", "id": id]) }
+    func editCapability(_ id: String, description: String?, examples: [String]?) {
+        var msg: [String: Any] = ["type": "edit_capability", "id": id]
+        if let description { msg["description"] = description }
+        if let examples { msg["examples"] = examples }
+        send(msg)
     }
 
     // MARK: - Private helpers
@@ -102,6 +142,34 @@ final class PythonBridge {
                 break // could show a brief ✓ flash here
             case "error":
                 self.lastError = (obj["message"] as? String) ?? "unknown error"
+            case "learned":
+                self.learnedEvent = LearnedEvent(
+                    id: (obj["id"] as? String) ?? "",
+                    action: (obj["action"] as? String) ?? "",
+                    phrase: (obj["phrase"] as? String) ?? "",
+                    description: (obj["description"] as? String) ?? "",
+                    primitive: (obj["primitive"] as? String) ?? "")
+            case "journal":
+                if let header = obj["header"] as? [String: Any] {
+                    self.journalHeader = JournalHeader(
+                        capabilities: (header["capabilities"] as? NSNumber)?.intValue ?? 0,
+                        learned: (header["learned"] as? NSNumber)?.intValue ?? 0,
+                        commands: (header["commands"] as? NSNumber)?.intValue ?? 0)
+                }
+                let cards = (obj["cards"] as? [[String: Any]]) ?? []
+                self.journalCards = cards.map { c in
+                    JournalCard(
+                        id: (c["id"] as? String) ?? "",
+                        description: (c["description"] as? String) ?? "",
+                        examples: (c["examples"] as? [String]) ?? [],
+                        primitive: (c["primitive"] as? String) ?? "",
+                        template: (c["template"] as? String) ?? "",
+                        origin: (c["origin"] as? String) ?? "shipped",
+                        learnedAt: c["learned_at"] as? String,
+                        timesUsed: (c["times_used"] as? NSNumber)?.intValue ?? 0,
+                        lastUsed: c["last_used"] as? String,
+                        confidence: (c["confidence"] as? NSNumber)?.doubleValue ?? 0)
+                }
             default:
                 break
             }
