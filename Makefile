@@ -12,6 +12,11 @@ TARGET      := $(ARCH)-apple-macos14.0
 # Pass -D HAS_MACOS26_SDK when the active SDK is macOS 26+ so glassEffect compiles.
 SDK_FLAGS   := $(shell [ "$(SDK_MAJOR)" -ge 26 ] 2>/dev/null && echo "-D HAS_MACOS26_SDK")
 
+# Version: latest reachable git tag (e.g. v0.0.5) → 0.0.5 for plist fields.
+# Override with `make app VERSION=v0.0.6`.
+VERSION        := $(shell git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0)
+VERSION_NUMBER := $(patsubst v%,%,$(VERSION))
+
 SOURCES := \
 	Otto/Otto/OttoApp.swift        \
 	Otto/Otto/CommandPalette.swift \
@@ -54,6 +59,8 @@ $(PLIST_DST): $(PLIST_SRC) | $(APP)/Contents
 	    -e 's/$$(EXECUTABLE_NAME)/Otto/g' \
 	    -e 's/$$(PRODUCT_BUNDLE_IDENTIFIER)/com.otto.app/g' \
 	    -e 's/$$(PRODUCT_NAME)/Otto/g' \
+	    -e 's/$$(MARKETING_VERSION)/$(VERSION_NUMBER)/g' \
+	    -e 's/$$(CURRENT_PROJECT_VERSION)/$(VERSION_NUMBER)/g' \
 	    "$<" > "$@"
 
 $(ICON_DST): $(ICON_SRC) | $(APP)/Contents/Resources
@@ -78,8 +85,9 @@ pkg: app
 	pkgbuild \
 	    --component "$(APP)" \
 	    --install-location /Applications \
+	    --version "$(VERSION_NUMBER)" \
 	    "Otto/build/Otto.pkg"
-	@echo "✓  Otto/build/Otto.pkg"
+	@echo "✓  Otto/build/Otto.pkg ($(VERSION_NUMBER))"
 
 clean:
 	rm -rf Otto/build/
