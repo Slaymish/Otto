@@ -3,6 +3,7 @@ import AppKit
 
 private extension Notification.Name {
     static let paletteDidShow = Notification.Name("OttoPaletteDidShow")
+    static let paletteDidHide = Notification.Name("OttoPaletteDidHide")
 }
 
 private enum SuggestionKind {
@@ -68,7 +69,24 @@ struct CommandPalette: View {
             bridge.requestSuggestions()
             startListeningIfEnabled()
         }
-        .onChange(of: inputText) { selectedIndex = nil }
+        // When the palette is dismissed (hotkey toggle, click-outside, etc.) reset
+        // the mic so the next summon starts a clean listen instead of a no-op.
+        .onReceive(NotificationCenter.default.publisher(for: .paletteDidHide)) { _ in
+            isListening = false
+            bridge.cancelVoice()
+        }
+        .onChange(of: inputText) { _, newValue in
+            selectedIndex = nil
+            // Typing and listening are mutually exclusive: stop the mic once the
+            // user commits to text. Leaving it on churns micLevel every frame,
+            // which re-renders the palette and steals focus from the field.
+            if !newValue.isEmpty { stopListening() }
+        }
+        // Orb and bar modes are different view branches, so the focused TextField
+        // is replaced when switching. Re-assert focus on the new field.
+        .onChange(of: isOrbMode) {
+            DispatchQueue.main.async { textFieldFocused = true }
+        }
         // Auto-clear a spoken result after it has lingered, so the palette
         // returns to a clean state instead of holding stale text.
         .task(id: bridge.spokenText) {
@@ -631,6 +649,7 @@ final class PaletteController: NSObject, NSWindowDelegate {
 
     func hide() {
         guard let panel, panel.isVisible else { return }
+        NotificationCenter.default.post(name: .paletteDidHide, object: nil)
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.15
             panel.animator().alphaValue = 0

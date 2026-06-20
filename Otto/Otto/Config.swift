@@ -16,6 +16,20 @@ enum Config {
         return v.isEmpty ? nil : v
     }
 
+    // Use a local Ollama model for the retrospective instead of OpenAI.
+    static var ollamaEnabled: Bool {
+        if let v = env["OTTO_OLLAMA"] { return (v as NSString).boolValue }
+        return SettingsStore.shared.ollamaEnabled
+    }
+    static var ollamaHost: String {
+        let v = env["OTTO_OLLAMA_HOST"] ?? SettingsStore.shared.ollamaHost
+        return v.isEmpty ? "http://localhost:11434" : v
+    }
+    static var ollamaModel: String {
+        let v = env["OTTO_OLLAMA_MODEL"] ?? SettingsStore.shared.ollamaModel
+        return v.isEmpty ? "llama3.1" : v
+    }
+
     static var dataDir: URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return support.appendingPathComponent("Otto")

@@ -180,7 +180,6 @@ final class OttoEngine {
             let heard = (obj["transcript"] as? String ?? "").trimmingCharacters(in: .whitespaces)
             transcript = heard
             if !heard.isEmpty {
-                SessionLog.shared.logHeard(heard)
                 await handleTranscription(ws: ws, heard: heard)
             }
 
@@ -208,9 +207,10 @@ final class OttoEngine {
     // MARK: - Turn handling
 
     private func handleTranscription(ws: URLSessionWebSocketTask, heard: String) async {
-        let ctx = CapabilityIndex.shared.contextBlock(for: heard)
-        if !ctx.isEmpty {
-            let updated = sessionConfig(extraInstructions: ctx)
+        let matched = CapabilityIndex.shared.retrieve(query: heard)
+        SessionLog.shared.logHeard(heard, matched: matched.map(\.id))
+        if !matched.isEmpty {
+            let updated = sessionConfig(extraInstructions: CapabilityIndex.shared.contextBlock(for: matched))
             try? await sendJSON(ws, updated)
         }
         await createResponse(ws)
@@ -235,7 +235,7 @@ final class OttoEngine {
         let latencyMs = Int(Date().timeIntervalSince(start) * 1000)
 
         let ok = (result["error"] == nil)
-        SessionLog.shared.logToolCall(name, ok: ok, latencyMs: latencyMs)
+        SessionLog.shared.logToolCall(name, args: args, ok: ok, latencyMs: latencyMs)
 
         responseInFlight = false
 
@@ -362,6 +362,16 @@ final class OttoEngine {
             audio.stopPlayback()
             isSpeaking = false
         }
+        Task { try? await sendJSON(ws, ["type": "input_audio_buffer.clear"]) }
+    }
+
+    // Discard an in-progress listen without committing (e.g. palette dismissed).
+    // Stops capture state and clears the audio buffer so the next listen is clean.
+    func cancelVoice() {
+        isListening = false
+        waveformActive = false
+        micLevel = 0
+        guard let ws = currentWS else { return }
         Task { try? await sendJSON(ws, ["type": "input_audio_buffer.clear"]) }
     }
 

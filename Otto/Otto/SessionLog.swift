@@ -24,16 +24,20 @@ final class SessionLog {
 
     func currentURL() -> URL? { fileURL }
 
-    func logHeard(_ text: String) {
-        append(["type": "heard", "text": text])
+    // `matched` are the capability ids retrieved for this phrase. An empty list
+    // means the model had to improvise — the key signal for cold-start learning.
+    func logHeard(_ text: String, matched: [String] = []) {
+        append(["type": "heard", "text": text, "matched": matched])
     }
 
     func logSpoken(_ text: String) {
         append(["type": "spoken", "text": text])
     }
 
-    func logToolCall(_ tool: String, ok: Bool, latencyMs: Int) {
-        append(["type": "tool_call", "tool": tool, "ok": ok, "latency_ms": latencyMs])
+    // `args` are the actual tool arguments so the retrospective can build a real
+    // template from a successful improvisation instead of guessing.
+    func logToolCall(_ tool: String, args: [String: Any], ok: Bool, latencyMs: Int) {
+        append(["type": "tool_call", "tool": tool, "args": args, "ok": ok, "latency_ms": latencyMs])
     }
 
     func logError(_ message: String) {

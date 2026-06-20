@@ -79,6 +79,11 @@ Most settings live in the in-app Settings window — API key, mic, browser, hotk
 | `OTTO_MODEL` | `gpt-realtime-2` | Realtime model |
 | `OTTO_MIC` | system default | Mic to use (partial name match, e.g. `Scarlett`) |
 | `OTTO_USER_NAME` | — | Your name, used in the system prompt |
+| `OTTO_OLLAMA` | `false` | Run the post-session retrospective on a local [Ollama](https://ollama.com) model (falls back to OpenAI if unreachable) |
+| `OTTO_OLLAMA_HOST` | `http://localhost:11434` | Ollama server address |
+| `OTTO_OLLAMA_MODEL` | `llama3.1` | Ollama model for learning |
+
+> Ollama (for local learning) can also be enabled during onboarding or under **Settings → Local Learning**.
 
 <br>
 

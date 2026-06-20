@@ -15,6 +15,9 @@ final class SettingsStore: ObservableObject {
     @Published var journalHotkey: HotkeyConfig = .journalDefault
     @Published var micAutoStart: Bool = true
     @Published var launchAtLogin: Bool = false
+    @Published var ollamaEnabled: Bool = false
+    @Published var ollamaHost: String = "http://localhost:11434"
+    @Published var ollamaModel: String = "llama3.1"
 
     var isConfigured: Bool {
         !openAIKey.isEmpty && UserDefaults.standard.bool(forKey: "otto.onboardingComplete")
@@ -31,6 +34,9 @@ final class SettingsStore: ObservableObject {
         journalHotkey = Self.decodeHotkey("otto.journalHotkey") ?? .journalDefault
         micAutoStart  = UserDefaults.standard.object(forKey: "otto.micAutoStart") as? Bool ?? true
         launchAtLogin = SMAppService.mainApp.status == .enabled
+        ollamaEnabled = UserDefaults.standard.bool(forKey: "otto.ollamaEnabled")
+        ollamaHost    = UserDefaults.standard.string(forKey: "otto.ollamaHost").flatMap { $0.isEmpty ? nil : $0 } ?? "http://localhost:11434"
+        ollamaModel   = UserDefaults.standard.string(forKey: "otto.ollamaModel").flatMap { $0.isEmpty ? nil : $0 } ?? "llama3.1"
     }
 
     func save() {
@@ -41,6 +47,9 @@ final class SettingsStore: ObservableObject {
         Self.encodeHotkey(summonHotkey,  forKey: "otto.summonHotkey")
         Self.encodeHotkey(journalHotkey, forKey: "otto.journalHotkey")
         UserDefaults.standard.set(micAutoStart, forKey: "otto.micAutoStart")
+        UserDefaults.standard.set(ollamaEnabled, forKey: "otto.ollamaEnabled")
+        UserDefaults.standard.set(ollamaHost,    forKey: "otto.ollamaHost")
+        UserDefaults.standard.set(ollamaModel,   forKey: "otto.ollamaModel")
         UserDefaults.standard.set(true,        forKey: "otto.onboardingComplete")
         applyLaunchAtLogin(launchAtLogin)
     }

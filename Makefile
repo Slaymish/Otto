@@ -63,6 +63,7 @@ $(BINARY): $(SOURCES) | $(APP)/Contents/MacOS
 	    -framework Carbon \
 	    -framework ServiceManagement \
 	    -framework AVFoundation \
+	    -framework NaturalLanguage \
 	    $(SDK_FLAGS) \
 	    -O \
 	    -o "$@"

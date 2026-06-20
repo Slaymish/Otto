@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 
 // MARK: - Capability model
 
@@ -46,7 +47,17 @@ struct Capability: Codable, Identifiable {
 final class CapabilityIndex {
     static let shared = CapabilityIndex()
 
+    // Semantic match counts only above this cosine similarity. Keeps unrelated
+    // queries returning nothing so the "no capability matched" signal stays
+    // meaningful for retrospective learning.
+    private static let semanticThreshold = 0.45
+
     private var capabilities: [Capability] = []
+
+    // Cached sentence embeddings per capability id (description + each example).
+    // nil when the OS sentence-embedding model is unavailable → pure keyword fallback.
+    private let embedding = NLEmbedding.sentenceEmbedding(for: .english)
+    private var vectors: [String: [[Double]]] = [:]
 
     private init() { reload() }
 
@@ -71,21 +82,38 @@ final class CapabilityIndex {
         }
 
         capabilities = caps
+        buildVectors()
     }
 
-    // MARK: - Keyword search
+    private func buildVectors() {
+        guard let embedding else { vectors = [:]; return }
+        var map: [String: [[Double]]] = [:]
+        for cap in capabilities {
+            map[cap.id] = ([cap.description] + cap.examples)
+                .compactMap { embedding.vector(for: $0.lowercased()) }
+        }
+        vectors = map
+    }
+
+    // MARK: - Hybrid keyword + semantic search
 
     func retrieve(query: String, topK: Int = 3) -> [Capability] {
         let qToks = tokens(query)
         guard !qToks.isEmpty else { return [] }
+        let qVec = embedding?.vector(for: query.lowercased())
 
         return capabilities
             .map { cap -> (Capability, Double) in
                 let text = ([cap.description] + cap.examples).joined(separator: " ")
                 let cToks = tokens(text)
                 let overlap = Double(qToks.intersection(cToks).count)
-                let score = overlap / Double(qToks.union(cToks).count)
-                return (cap, score)
+                let jaccard = overlap / Double(qToks.union(cToks).count)
+                let semantic = semanticScore(qVec: qVec, capID: cap.id)
+
+                // Include on any lexical overlap (legacy behaviour) or a confident
+                // semantic match; rank by whichever signal is stronger.
+                let include = jaccard > 0 || semantic >= Self.semanticThreshold
+                return (cap, include ? max(jaccard, semantic) : 0)
             }
             .filter { $0.1 > 0 }
             .sorted { $0.1 > $1.1 }
@@ -94,16 +122,36 @@ final class CapabilityIndex {
     }
 
     func contextBlock(for query: String) -> String {
-        let top = retrieve(query: query)
-        guard !top.isEmpty else { return "" }
+        contextBlock(for: retrieve(query: query))
+    }
+
+    func contextBlock(for caps: [Capability]) -> String {
+        guard !caps.isEmpty else { return "" }
         var lines = ["RETRIEVED CAPABILITIES (use these as recipes):"]
-        for cap in top {
+        for cap in caps {
             lines.append("- \(cap.description)")
             lines.append("  primitive: \(cap.primitive)")
             let tpl = String(cap.template.prefix(120))
             lines.append("  template: \(tpl)")
         }
         return lines.joined(separator: "\n")
+    }
+
+    private func semanticScore(qVec: [Double]?, capID: String) -> Double {
+        guard let qVec, let vecs = vectors[capID] else { return 0 }
+        return vecs.reduce(0.0) { max($0, cosine(qVec, $1)) }
+    }
+
+    private func cosine(_ a: [Double], _ b: [Double]) -> Double {
+        guard a.count == b.count, !a.isEmpty else { return 0 }
+        var dot = 0.0, na = 0.0, nb = 0.0
+        for i in a.indices {
+            dot += a[i] * b[i]
+            na  += a[i] * a[i]
+            nb  += b[i] * b[i]
+        }
+        guard na > 0, nb > 0 else { return 0 }
+        return max(0, dot / (na.squareRoot() * nb.squareRoot()))
     }
 
     private func tokens(_ text: String) -> Set<String> {

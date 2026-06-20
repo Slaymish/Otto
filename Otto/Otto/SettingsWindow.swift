@@ -64,6 +64,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     apiKeySection
                     preferencesSection
+                    ollamaSection
                     shortcutsSection
                     updatesSection
                 }
@@ -125,6 +126,28 @@ struct SettingsView: View {
                     .toggleStyle(.switch)
             }
             .padding(.top, 4)
+        }
+    }
+
+    private var ollamaSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Local Learning (Ollama)")
+                .font(.headline)
+            Text("Run the post-session retrospective on a local Ollama model instead of OpenAI. Falls back to OpenAI if Ollama isn't reachable.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Toggle("Use Ollama for learning", isOn: $store.ollamaEnabled)
+                .toggleStyle(.switch)
+
+            if store.ollamaEnabled {
+                VStack(alignment: .leading, spacing: 14) {
+                    labeledField("Host", placeholder: "http://localhost:11434", binding: $store.ollamaHost)
+                    labeledField("Model", placeholder: "e.g. llama3.1", binding: $store.ollamaModel)
+                }
+                .padding(.top, 4)
+            }
         }
     }
 

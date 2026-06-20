@@ -98,6 +98,17 @@ struct OnboardingView: View {
                 labeledField("Your name",    placeholder: "e.g. Hamish",        binding: $store.userName)
                 labeledField("Microphone",   placeholder: "Partial name, e.g. Scarlett", binding: $store.micName)
                 labeledField("Browser",      placeholder: "e.g. Chrome  (default: Safari)", binding: $store.browserName)
+
+                Toggle("Use a local Ollama model for learning", isOn: $store.ollamaEnabled)
+                    .toggleStyle(.switch)
+                    .padding(.top, 6)
+                if store.ollamaEnabled {
+                    labeledField("Ollama model", placeholder: "e.g. llama3.1", binding: $store.ollamaModel)
+                    Text("Runs the post-session retrospective locally instead of OpenAI. Falls back to OpenAI if Ollama isn't reachable.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .padding(40)

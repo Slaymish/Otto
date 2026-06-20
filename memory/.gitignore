@@ -3,3 +3,8 @@ capabilities.user.json
 
 # Session logs contain your voice commands — keep private
 sessions/
+
+# Embedding cache + learning journal — machine-local, regenerated at runtime
+embeddings.npy
+embedding_ids.json
+learning_journal.jsonl
