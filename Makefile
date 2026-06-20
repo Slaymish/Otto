@@ -28,7 +28,8 @@ SOURCES := \
 	Otto/Otto/SettingsStore.swift  \
 	Otto/Otto/SettingsWindow.swift \
 	Otto/Otto/SetupEngine.swift    \
-	Otto/Otto/OnboardingView.swift
+	Otto/Otto/OnboardingView.swift \
+	Otto/Otto/HotkeyConfig.swift
 
 APP       := Otto/build/Otto.app
 BINARY    := $(APP)/Contents/MacOS/Otto
