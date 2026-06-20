@@ -275,6 +275,9 @@ final class PaletteController: NSObject, NSWindowDelegate {
     private var panel: CommandPanel?
     private var hostingController: NSHostingController<CommandPalette>?
     private let bridge: PythonBridge
+    /// Set by AppDelegate after both controllers exist; forwarded into CommandPalette
+    /// so the "Edit" button in the learned-nudge chip can open the journal window.
+    var onOpenJournal: () -> Void = {}
 
     init(bridge: PythonBridge) {
         self.bridge = bridge
@@ -346,7 +349,11 @@ final class PaletteController: NSObject, NSWindowDelegate {
         p.animationBehavior = .none
         p.delegate = self
 
-        let rootView = CommandPalette(bridge: bridge, onDismiss: { [weak self] in self?.hide() })
+        let rootView = CommandPalette(
+            bridge: bridge,
+            onDismiss: { [weak self] in self?.hide() },
+            onOpenJournal: { [weak self] in self?.onOpenJournal() }
+        )
         let hosting = NSHostingController(rootView: rootView)
         // Let the hosting controller size the panel to fit SwiftUI content.
         hosting.sizingOptions = .preferredContentSize

@@ -1,3 +1,4 @@
+import Carbon
 import SwiftUI
 import AppKit
 
@@ -16,7 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let bridge = PythonBridge()
     private var paletteController: PaletteController?
+    private var journalController: JournalController?
     private var hotkeyManager: HotkeyManager?
+    private var journalHotkey: HotkeyManager?
     private var pythonProcess: Process?
     private var stdoutPipe: Pipe?
 
@@ -25,11 +28,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         paletteController = PaletteController(bridge: bridge)
+        journalController = JournalController(bridge: bridge)
 
+        // Wire the palette "Edit" button → journal window.
+        paletteController?.onOpenJournal = { [weak self] in self?.journalController?.show() }
+
+        // ⌥Space  (id: 1) — palette
         hotkeyManager = HotkeyManager(onToggle: { [weak self] in
             self?.paletteController?.toggle()
         })
         hotkeyManager?.register()
+
+        // ⌥⇧Space (id: 2) — journal; different id avoids Carbon handler-chain collision.
+        journalHotkey = HotkeyManager(
+            keyCode: 49,
+            modifiers: UInt32(optionKey) | UInt32(shiftKey),
+            id: 2,
+            onToggle: { [weak self] in self?.journalController?.toggle() }
+        )
+        journalHotkey?.register()
 
         launchPython()
     }

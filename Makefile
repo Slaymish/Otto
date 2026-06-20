@@ -13,7 +13,8 @@ SOURCES := \
 	Otto/Otto/CommandPalette.swift \
 	Otto/Otto/HotkeyManager.swift  \
 	Otto/Otto/PythonBridge.swift   \
-	Otto/Otto/WaveformView.swift
+	Otto/Otto/WaveformView.swift   \
+	Otto/Otto/JournalWindow.swift
 
 APP       := Otto/build/Otto.app
 BINARY    := $(APP)/Contents/MacOS/Otto
