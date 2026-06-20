@@ -355,7 +355,31 @@ if __name__ == "__main__":
                         help="number of recent sessions to reflect on (default: 1)")
     parser.add_argument("--session-file", type=str, default=None,
                         help="path to a specific session JSONL file")
+    parser.add_argument("--journal", action="store_true",
+                        help="print the capability journal (what you've learned) and exit")
+    parser.add_argument("--undo", type=str, default=None, metavar="ID",
+                        help="undo the most recent learned change for capability ID and exit")
     args = parser.parse_args()
+
+    import learning_store
+
+    if args.undo:
+        ok = learning_store.undo(args.undo)
+        print(f"[journal] {'undone' if ok else 'nothing to undo for'} {args.undo}")
+        raise SystemExit(0)
+
+    if args.journal:
+        header, cards = learning_store.build_journal()
+        print(f"\n  {header['capabilities']} capabilities · "
+              f"{header['learned']} learned by you · {header['commands']} commands run\n")
+        for c in cards:
+            tag = "✦" if c.origin == "learned" else " "
+            used = f"{c.times_used}×" if c.times_used else "—"
+            print(f"  {tag} [{c.id}] {c.description}  ({used}, conf {c.confidence})")
+            if c.examples:
+                print(f"      e.g. {'; '.join(c.examples[:3])}")
+        print()
+        raise SystemExit(0)
 
     path = Path(args.session_file) if args.session_file else None
     added = run_retrospective(session_log_path=path, sessions=args.sessions, verbose=True)
