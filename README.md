@@ -15,6 +15,8 @@ It's not a demo and it's not a gimmick. It's built to be a daily driver.
 - **Hands** — 5 primitive tools: AppleScript, key presses, screen reading, URL opening, OBS WebSocket
 - **Memory** — local semantic retrieval: your capabilities are embedded with `sentence-transformers` and searched on every turn, fully on-device, $0
 - **Learning** — a post-session "dreaming" loop reflects on what worked and writes new capability templates for next time
+- **Aware** — scans your installed apps at startup so it only suggests capabilities it can actually run; passively captures what's on screen after each action so the next command has context
+- **Escape hatch** — hand off anything too complex to Claude Code: say "let Claude handle this" and it opens Terminal with a live session
 - **Surface** — a native SwiftUI command palette (⌥Space), or any of four terminal modes
 
 ---
@@ -89,17 +91,23 @@ bundles them into `Otto.app`, and ad-hoc code-signs the result.
 ## How it works
 
 ```
+startup
+    system_scan.py scans /Applications → installed app list
+    retrieval.py loads capabilities.json, filters out any whose
+    required_apps aren't installed, embeds all examples (~2ms cached)
+
 your voice
     │
     ▼
 gpt-realtime-2 transcribes the command
     │
     ▼
-retrieval.py embeds the transcript and searches capabilities.json
+retrieval.py embeds the transcript and searches the filtered index
 returns top-3 matching capability templates (locally, ~2ms)
     │
     ▼
 context injected: "RETRIEVED CAPABILITIES: cut in Premiere → press_key cmd+k"
+       + "CURRENT SCREEN (app: Safari, captured 4s ago): ..." (if recent)
     │
     ▼
 model calls the right primitive with filled-in parameters
@@ -111,7 +119,10 @@ model calls the right primitive with filled-in parameters
     └─ obs_call(requestType, data)   OBS WebSocket
     │
     ▼
-app does the thing → model speaks a short confirmation
+app does the thing → screen snapshot fires in background (screen cache)
+    │
+    ▼
+model speaks a short confirmation
     │
     ▼  (on Ctrl-C / session end)
 retrospective.py reflects on what worked → writes new templates to
@@ -123,12 +134,17 @@ capability as a recipe and fills in the parameters. New capabilities are
 added by editing `memory/capabilities.json` — or by just using your Mac and
 letting the retrospective learn them for you.
 
+For anything too complex to handle with a one-shot command — refactoring code,
+building a script, researching something across multiple steps — just say "hand
+this off to Claude Code" (or "let Claude handle this"). Otto opens Terminal and
+starts a live Claude Code session with your task as the prompt.
+
 ---
 
 ## The capability store
 
 `memory/capabilities.json` — shipped generic capabilities (app launching,
-Spotify, Premiere editing, OBS, web search, notes, etc.).
+Spotify, Premiere editing, OBS, web search, notes, terminal/Claude Code, etc.).
 
 `memory/capabilities.user.json` — your personal capabilities, written by the
 dreaming loop after each session. Gitignored. Format:
@@ -143,6 +159,21 @@ dreaming loop after each session. Gitignored. Format:
     "template": { "combo": "cmd+k", "app": "Adobe Premiere Pro" }
   }
 ]
+```
+
+The optional `"required_apps"` field lists app names (as they appear in
+`/Applications`) that must be installed for a capability to be loaded. At startup
+`system_scan.py` walks `/Applications`, and any capability whose required apps
+aren't present is silently dropped from the index — so Otto won't suggest Spotify
+commands on a machine where Spotify isn't installed.
+
+```json
+{
+  "id": "spotify-play-search",
+  "required_apps": ["Spotify"],
+  "primitive": "run_applescript",
+  ...
+}
 ```
 
 **Adding a new capability:** add an entry to either JSON file and restart. The
@@ -242,6 +273,7 @@ otto/
 │   ├── wake_listener.py            local ($0-idle) wake-word engine: OpenWakeWord + faster-whisper
 │   ├── actions.py                  the 5 primitive tools the model calls
 │   ├── retrieval.py                local capability embedding index + cosine search
+│   ├── system_scan.py              startup app scanner — filters capabilities by what's installed
 │   ├── retrospective.py            post-session dreaming loop — learns your phrasings
 │   ├── learning_store.py           persistence, journal, undo, usage stats for learned capabilities
 │   ├── session_log.py              structured per-session JSONL event logger

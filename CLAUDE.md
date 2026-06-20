@@ -48,9 +48,15 @@ All Python is run from within the `.venv` that `run.sh` creates. Scripts in `src
 ### The main flow
 
 ```
-voice → gpt-realtime-2 transcribes → retrieval.py embeds query + searches capabilities.json
-→ RETRIEVED CAPABILITIES injected as system context → model calls a primitive tool
-→ actions.py executes it → model speaks confirmation → session_log.py writes JSONL
+startup: system_scan.py scans /Applications → installed app set
+         retrieval.py loads capabilities.json, drops entries whose required_apps
+         aren't installed, embeds all examples (cached after first run)
+
+voice → gpt-realtime-2 transcribes → retrieval.py embeds query + searches filtered index
+→ RETRIEVED CAPABILITIES + CURRENT SCREEN (if recent) injected as system context
+→ model calls a primitive tool → actions.py executes it
+→ screen snapshot fires in background (screen cache updated)
+→ model speaks confirmation → session_log.py writes JSONL
 → (on Ctrl-C) retrospective.py reads log, calls gpt-4.1-mini, writes capabilities.user.json
 ```
 
@@ -74,17 +80,34 @@ Two layers:
    - `open_url(url)` — opens in configured browser
    - `obs_call(request_type, request_data)` — OBS WebSocket
 
-2. **Recipe functions** (higher-level, used in the legacy `_LEGACY_TOOLS` dict for standalone CLI testing): `open_app`, `play_music`, `premiere_control`, `obs_scene`, `ask_claude`, `web_search`, `click_link`, `take_note`, etc.
+2. **Recipe functions** (higher-level, used in the legacy `_LEGACY_TOOLS` dict for standalone CLI testing): `open_app`, `play_music`, `premiere_control`, `obs_scene`, `ask_claude`, `web_search`, `click_link`, `take_note`, `run_terminal`, etc.
 
-The model uses the 5 primitives to implement whatever the capability template describes.
+3. **Internal helpers** (not exposed to the model, used by the agent loop):
+   - `read_frontmost_screen()` — gets the frontmost non-Otto app via osascript, then snapshots its accessibility tree. Called after every tool dispatch to keep the screen cache fresh.
+
+The model uses the 5 primitives to implement whatever the capability template describes. For complex multi-step tasks, the `terminal-run` capability directs the model to open Terminal and hand off to Claude Code via `run_terminal(task)`.
+
+### System scan (`src/system_scan.py`)
+
+Runs once at startup (result cached). Walks `/Applications` and `~/Applications`, builds a lowercase set of installed app names. Also checks for CLIs (`shutil.which`). Two consumers:
+
+- **`retrieval.py`** — filters `CapabilityIndex` entries whose `required_apps` list has no installed match. `CapabilityIndex(filter_by_installed=False)` disables this (used in tests so retrieval quality isn't machine-dependent).
+- **`voice_agent._build_instructions()`** — injects a short "INSTALLED TOOLS" block into the system prompt so the model knows what's available and whether Claude Code is present.
 
 ### Capability store and retrieval (`src/retrieval.py`)
 
-- `memory/capabilities.json` — shipped capability templates (each has `id`, `description`, `examples[]`, `primitive`, `template`)
-- `memory/capabilities.user.json` — your learned capabilities (gitignored), written by the retrospective
+- `memory/capabilities.json` — shipped capability templates. Each entry has `id`, `description`, `examples[]`, `primitive`, `template`, and optionally `required_apps[]`.
+- `memory/capabilities.user.json` — your learned capabilities (gitignored), written by the retrospective.
+- `required_apps` — if set, the capability is excluded from the index unless at least one of the listed apps is found in `/Applications` by `system_scan`. App names must match the stem of the `.app` bundle (case-insensitive).
 - On startup, `CapabilityIndex` embeds all example phrases with `sentence-transformers/all-MiniLM-L6-v2` (~22 MB, runs fully locally). The embedding cache (`memory/embeddings.npy` + `memory/embedding_ids.json`) auto-invalidates when capabilities change.
 - Per-turn: the transcript is embedded, cosine similarity ranks capabilities, top-3 are injected as `RETRIEVED CAPABILITIES (grounding: STRONG|WEAK)` into the conversation before `response.create` fires.
 - Grounding is STRONG when top score ≥ 0.52, or ≥ 0.40 with clear dominance over the runner-up. The system prompt tells the model to refuse ambiguous weak-grounding commands.
+
+### Screen context
+
+After every successful tool call, `voice_agent._update_screen_cache()` fires as a background task. It calls `actions.read_frontmost_screen()`, which gets the current frontmost app (excluding Otto itself) via osascript and snapshots its accessibility tree. The result is stored in `_screen_cache` with a timestamp.
+
+On the next turn, `_inject_capability_context()` prepends a `CURRENT SCREEN (app: X, captured Ns ago): ...` block to the capability context if the cache is < 60 seconds old. This gives the model passive awareness of what was on screen after the previous action — without any explicit "read the screen" command.
 
 ### Dreaming loop (`src/retrospective.py`)
 
@@ -107,3 +130,5 @@ Single source of truth for all constants, all overridable via env vars or `.env`
 ## Adding a new capability
 
 Edit `memory/capabilities.json` (or `capabilities.user.json`) and restart — the embedding cache auto-regenerates. See `docs/ADD-AN-APP.md` for the full recipe: snapshot the app with `agent-desktop snapshot --app "AppName" --compact`, write a tool function in `actions.py`, register it in both `TOOLS` dicts, add a `TOOLS` entry in `voice_agent.py`.
+
+If the capability only makes sense when a specific app is installed, add `"required_apps": ["App Name"]` — the entry will be silently skipped on machines where that app isn't present.
