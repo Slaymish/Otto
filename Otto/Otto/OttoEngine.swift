@@ -27,22 +27,18 @@ final class OttoEngine {
     private let audio = AudioEngine()
     private let actions = ActionEngine()
     private let urlSession = URLSession(configuration: .default)
-    private let apiKey: String
-    private let model: String
+
+    private var model: String { Config.model }
 
     private var wsURL: URL {
         URL(string: "wss://api.openai.com/v1/realtime?model=\(model)")!
     }
 
-    // MARK: - Init / deinit
-
-    init() {
-        let env = ProcessInfo.processInfo.environment
-        self.apiKey = env["OPENAI_API_KEY"] ?? SettingsStore.shared.openAIKey
-        self.model  = env["OTTO_MODEL"] ?? "gpt-realtime-2"
-    }
+    // MARK: - Lifecycle
 
     func start() {
+        Task.detached { await Retrospective.processLastSession() }
+        SessionLog.shared.startSession()
         realtimeTask = Task { [weak self] in await self?.runLoop() }
     }
 
@@ -62,6 +58,7 @@ final class OttoEngine {
     }
 
     private func connectAndRun() async {
+        let apiKey = Config.openAIKey
         guard !apiKey.isEmpty else {
             lastError = "OPENAI_API_KEY not set"
             return
@@ -86,7 +83,6 @@ final class OttoEngine {
 
         do {
             try audio.start { [weak self] data, level in
-                // Bridge from AVAudioEngine audio thread → main actor
                 Task { @MainActor [weak self] in
                     await self?.onAudioFrame(data: data, level: level)
                 }
@@ -163,12 +159,13 @@ final class OttoEngine {
             }
 
         case "response.output_audio_transcript.delta":
-            break  // incremental transcript — ignored in Phase 01
+            break
 
         case "response.output_audio_transcript.done":
             let text = (obj["transcript"] as? String ?? "").trimmingCharacters(in: .whitespaces)
             spokenText = text
             transcript = ""
+            if !text.isEmpty { SessionLog.shared.logSpoken(text) }
 
         case "response.done":
             isSpeaking = false
@@ -181,6 +178,7 @@ final class OttoEngine {
             let heard = (obj["transcript"] as? String ?? "").trimmingCharacters(in: .whitespaces)
             transcript = heard
             if !heard.isEmpty {
+                SessionLog.shared.logHeard(heard)
                 await handleTranscription(ws: ws, heard: heard)
             }
 
@@ -194,9 +192,10 @@ final class OttoEngine {
             responseInFlight = false
             let err = obj["error"] as? [String: Any]
             let code = err?["code"] as? String ?? ""
-            // conversation_already_has_active_response is safe to ignore
             if code != "conversation_already_has_active_response" {
-                lastError = err?["message"] as? String ?? "Realtime API error"
+                let msg = err?["message"] as? String ?? "Realtime API error"
+                lastError = msg
+                SessionLog.shared.logError(msg)
             }
 
         default:
@@ -207,7 +206,11 @@ final class OttoEngine {
     // MARK: - Turn handling
 
     private func handleTranscription(ws: URLSessionWebSocketTask, heard: String) async {
-        // Phase 01: capability context injection is stubbed; added in Phase 03.
+        let ctx = CapabilityIndex.shared.contextBlock(for: heard)
+        if !ctx.isEmpty {
+            let updated = sessionConfig(extraInstructions: ctx)
+            try? await sendJSON(ws, updated)
+        }
         await createResponse(ws)
     }
 
@@ -225,7 +228,13 @@ final class OttoEngine {
         let args = (try? JSONSerialization.jsonObject(
             with: Data(argsString.utf8)) as? [String: Any]) ?? [:]
 
+        let start = Date()
         let result = await actions.dispatch(name: name, args: args)
+        let latencyMs = Int(Date().timeIntervalSince(start) * 1000)
+
+        let ok = (result["error"] == nil)
+        SessionLog.shared.logToolCall(name, ok: ok, latencyMs: latencyMs)
+
         responseInFlight = false
 
         let outputStr = (try? String(
@@ -244,16 +253,17 @@ final class OttoEngine {
 
     // MARK: - Session config
 
-    private func sessionConfig() -> [String: Any] {
-        [
+    private func sessionConfig(extraInstructions: String = "") -> [String: Any] {
+        var instructions = baseInstructions()
+        if !extraInstructions.isEmpty {
+            instructions = extraInstructions + "\n\n" + instructions
+        }
+        return [
             "type": "session.update",
             "session": [
                 "type": "realtime",
                 "model": model,
-                "instructions": """
-                    You are Otto, a macOS voice assistant. Use the available tools to control \
-                    the user's Mac. Always confirm actions briefly after executing them.
-                    """,
+                "instructions": instructions,
                 "output_modalities": ["audio"],
                 "audio": [
                     "input": [
@@ -262,7 +272,6 @@ final class OttoEngine {
                             "model": "gpt-4o-transcribe",
                             "language": "en",
                         ],
-                        // No auto VAD — we commit the buffer manually on voice_stop
                         "turn_detection": NSNull(),
                     ],
                     "output": [
@@ -276,7 +285,15 @@ final class OttoEngine {
         ]
     }
 
-    // MARK: - Tool definitions (matches voice_agent.py TOOLS list)
+    private func baseInstructions() -> String {
+        var parts = ["You are Otto, a macOS voice assistant. Use the available tools to control the user's Mac. Always confirm actions briefly after executing them."]
+        if let name = Config.userName {
+            parts.append("The user's name is \(name).")
+        }
+        return parts.joined(separator: " ")
+    }
+
+    // MARK: - Tool definitions
 
     private var toolDefinitions: [[String: Any]] {[
         tool("run_applescript", "Execute an AppleScript snippet to automate macOS apps.",
@@ -331,7 +348,7 @@ final class OttoEngine {
         try await ws.send(.string(str))
     }
 
-    // MARK: - OttoBridge commands
+    // MARK: - Commands
 
     func sendVoiceStart() {
         guard let ws = currentWS else { return }
@@ -349,11 +366,9 @@ final class OttoEngine {
         isListening = false
         waveformActive = false
         micLevel = 0
-        // Small delay lets any in-flight audio-frame tasks finish their sends
         Task {
             try? await Task.sleep(for: .milliseconds(150))
             try? await sendJSON(ws, ["type": "input_audio_buffer.commit"])
-            // response.create fires from handleTranscription after the transcript arrives
         }
     }
 
@@ -372,10 +387,61 @@ final class OttoEngine {
         }
     }
 
-    // Journal / suggestions — stubbed; wired in Phase 04
-    func requestJournal()    {}
-    func requestSuggestions(){}
-    func undoLearning(_ id: String)         {}
-    func deleteCapability(_ id: String)     {}
-    func editCapability(_ id: String, description: String?, examples: [String]?) {}
+    // MARK: - Journal
+
+    func requestJournal() {
+        journalCards  = CapabilityIndex.shared.asJournalCards()
+        journalHeader = CapabilityIndex.shared.header
+    }
+
+    func requestSuggestions() {
+        recentPhrases = loadRecentPhrases()
+    }
+
+    func undoLearning(_ id: String) {
+        CapabilityIndex.shared.delete(id)
+        requestJournal()
+    }
+
+    func deleteCapability(_ id: String) {
+        CapabilityIndex.shared.delete(id)
+        requestJournal()
+    }
+
+    func editCapability(_ id: String, description: String?, examples: [String]?) {
+        CapabilityIndex.shared.edit(id, description: description, examples: examples)
+        requestJournal()
+    }
+
+    // MARK: - Recent phrases from session logs
+
+    private func loadRecentPhrases() -> [RecentPhrase] {
+        let dir = Config.sessionsDir
+        guard let items = try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: nil) else { return [] }
+
+        var counts: [String: Int] = [:]
+
+        let logs = items
+            .filter { $0.pathExtension == "jsonl" || $0.pathExtension == "done" }
+            .sorted { $0.path > $1.path }
+            .prefix(5)
+
+        for url in logs {
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            for line in text.components(separatedBy: "\n") {
+                guard let data = line.data(using: .utf8), !data.isEmpty,
+                      let obj  = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      (obj["type"] as? String) == "heard",
+                      let phrase = obj["text"] as? String,
+                      !phrase.isEmpty else { continue }
+                counts[phrase, default: 0] += 1
+            }
+        }
+
+        return counts
+            .sorted { $0.value > $1.value }
+            .prefix(10)
+            .map { RecentPhrase(phrase: $0.key, count: $0.value) }
+    }
 }

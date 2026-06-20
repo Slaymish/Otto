@@ -36,7 +36,11 @@ SOURCES := \
 	Otto/Otto/UpdateChecker.swift  \
 	Otto/Otto/CapabilityKind.swift \
 	Otto/Otto/OrbView.swift        \
-	Otto/Otto/CapabilityHalo.swift
+	Otto/Otto/CapabilityHalo.swift \
+	Otto/Otto/Config.swift         \
+	Otto/Otto/SessionLog.swift     \
+	Otto/Otto/CapabilityIndex.swift \
+	Otto/Otto/Retrospective.swift
 
 APP       := Otto/build/Otto.app
 BINARY    := $(APP)/Contents/MacOS/Otto
