@@ -4,9 +4,12 @@
 #   make app     — compile + bundle + sign → Otto/build/Otto.app
 #   make clean   — remove build output
 
-ARCH   := $(shell uname -m)
-SDK    := $(shell xcrun --show-sdk-path 2>/dev/null)
-TARGET := $(ARCH)-apple-macos14.0
+ARCH        := $(shell uname -m)
+SDK         := $(shell xcrun --show-sdk-path 2>/dev/null)
+SDK_MAJOR   := $(shell xcrun --show-sdk-version 2>/dev/null | cut -d. -f1)
+TARGET      := $(ARCH)-apple-macos14.0
+# Pass -D HAS_MACOS26_SDK when the active SDK is macOS 26+ so glassEffect compiles.
+SDK_FLAGS   := $(shell [ "$(SDK_MAJOR)" -ge 26 ] 2>/dev/null && echo "-D HAS_MACOS26_SDK")
 
 SOURCES := \
 	Otto/Otto/OttoApp.swift        \
@@ -33,6 +36,7 @@ $(BINARY): $(SOURCES) | $(APP)/Contents/MacOS
 	    -sdk "$(SDK)" \
 	    -target "$(TARGET)" \
 	    -framework Carbon \
+	    $(SDK_FLAGS) \
 	    -O \
 	    -o "$@"
 

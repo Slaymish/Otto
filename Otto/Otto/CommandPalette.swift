@@ -258,22 +258,26 @@ struct CommandPalette: View {
 
     // MARK: - Background
 
-    // Splitting glass/material into separate @available-attributed properties lets
-    // swiftc on older SDKs compile without seeing the macOS 26-only glassEffect API.
     @ViewBuilder private var paletteBackground: some View {
+        #if HAS_MACOS26_SDK
         if #available(macOS 26.0, *) {
             glassBackground
         } else {
             materialBackground
         }
+        #else
+        materialBackground
+        #endif
     }
 
+    #if HAS_MACOS26_SDK
     @available(macOS 26.0, *)
     private var glassBackground: some View {
         RoundedRectangle(cornerRadius: 20, style: .continuous)
             .fill(.clear)
             .glassEffect(in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
+    #endif
 
     private var materialBackground: some View {
         RoundedRectangle(cornerRadius: 20, style: .continuous)
