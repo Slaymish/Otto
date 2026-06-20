@@ -57,6 +57,7 @@ _session: "SessionLog | None" = None
 _cap_index: "_retrieval.CapabilityIndex | None" = None
 _ipc: "IPCServer | None" = None
 _last_turn: "dict | None" = None
+_learn_lock = asyncio.Lock()  # serialise store writes across concurrent novel commands
 
 def _arg_value(flag, default=None):
     if flag in sys.argv:
@@ -571,6 +572,45 @@ async def _handle_transcription(ws, ev: dict) -> None:
         await _inject_capability_context(ws, heard)
 
 
+async def _run_incremental_learner(turn: dict, near_miss_id: "str | None") -> None:
+    """Learn from one successful, weakly-grounded turn — off the turn path.
+
+    Spike lesson: never block the experience. The model path (when there is no
+    near miss) fails fast inside learn_turn; here we just serialise writes and
+    measure. A near_miss takes the deterministic path (no model call)."""
+    if not _MEMORY_ENABLED or _cap_index is None:
+        return
+    import incremental_learner
+    existing = [
+        {"id": c.id, "description": c.description, "examples": c.examples}
+        for c in _cap_index._caps
+    ]
+    loop = asyncio.get_event_loop()
+    async with _learn_lock:
+        t0 = time.monotonic()
+        try:
+            events = await loop.run_in_executor(
+                None, lambda: incremental_learner.learn_turn(
+                    turn, existing, near_miss_id=near_miss_id))
+        except Exception as e:  # noqa: BLE001
+            _log(f"learn failed: {e}")
+            return
+        path = "deterministic" if near_miss_id else "model"
+        _log(f"learn {path} {time.monotonic()-t0:.2f}s -> {len(events)} event(s)")
+        if not events:
+            return
+        for ev in events:
+            verb = "Learned" if ev.action == "new_capability" else "Now also"
+            print(f"\n✦  {verb}: {ev.phrase!r}", flush=True)
+            _log(f"LEARNED {ev.action} {ev.id} {ev.phrase!r}")
+            if _ipc:
+                _ipc.broadcast(ev.to_ipc())
+        try:
+            _cap_index.refresh()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 async def _handle_tool_call(ws, ev: dict) -> None:
     name = ev["name"]
     call_id = ev["call_id"]
@@ -594,6 +634,11 @@ async def _handle_tool_call(ws, ev: dict) -> None:
                            capability_id=_capability_id_for(_last_turn))
     if _ipc:
         _ipc.broadcast({"type": "tool_call", "name": name, "ok": status == "ok"})
+    if _should_learn(_last_turn.get("grounding") if _last_turn else None, status):
+        turn = {"query": (_last_turn or {}).get("query"),
+                "name": name, "args": args, "result": result}
+        near = (_last_turn or {}).get("near_miss_id")
+        asyncio.create_task(_run_incremental_learner(turn, near))
     await ws.send(json.dumps({
         "type": "conversation.item.create",
         "item": {"type": "function_call_output", "call_id": call_id,
