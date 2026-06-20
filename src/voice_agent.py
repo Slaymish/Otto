@@ -33,6 +33,7 @@ import queue
 import re
 import signal
 import sys
+import threading
 import time
 
 # Ignore SIGPIPE so writes to a closed Swift stdout pipe don't crash the process.
@@ -131,8 +132,14 @@ def _build_instructions() -> str:
         "use it as context when the command references what's on screen.\n\n"
         "RULES (follow strictly):\n"
         "- This is Otto, a voice assistant for the Mac, not a chatbot. ONLY respond to computer control commands.\n"
-        "- If the command matches a STRONG retrieved capability: execute it immediately.\n"
-        "- If grounding is WEAK or the command is ambiguous: say 'I can only run Mac\n"
+        "- If the command matches a STRONG retrieved capability: execute it immediately using its template.\n"
+        "- If grounding is WEAK but the command is still a clear Mac-control action\n"
+        "  (open/launch/focus an app, open a URL, press a key, read the screen, control\n"
+        "  an app), DO IT: use the closest retrieved capability as a guide, or build the\n"
+        "  action directly from the primitives. To open/launch/focus ANY app by name use\n"
+        "  run_applescript with: tell application \"<App Name>\" to activate\n"
+        "- Only refuse when the input is genuine chit-chat, a general question, or too\n"
+        "  ambiguous to map to any Mac action. To refuse, say 'I can only run Mac\n"
         f"  commands — what would you like me to do?' and stop.\n"
         "- For complex multi-step coding tasks (refactoring, building features, writing\n"
         "  scripts): use the terminal-run capability to hand off to Claude Code.\n"
@@ -241,11 +248,17 @@ def session_config() -> dict:
         # automatic VAD — we commit the buffer manually on key release.
         audio_in["turn_detection"] = None
     else:  # push-to-talk (Enter)
+        # detect + transcribe the turn but DON'T auto-respond — we fire
+        # response.create ourselves in _handle_transcription, AFTER injecting the
+        # retrieved-capability context, so the model is always grounded. Letting
+        # the server auto-respond raced the context injection and could fire two
+        # overlapping responses (conversation_already_has_active_response).
         audio_in["turn_detection"] = {
             "type": "server_vad",
             "threshold": 0.5,
             "prefix_padding_ms": 300,
             "silence_duration_ms": 1500,
+            "create_response": False,
         }
     return {
         "type": "session.update",
@@ -273,7 +286,19 @@ _play_buf = bytearray()
 _primed = False
 _speaking = False
 _text_input_inflight = False  # True from response.create until response.done/error
+_response_inflight = False  # guards against overlapping response.create calls
 _listening = WAKE_MODE  # wake mode streams always; PTT streams only after Enter
+
+
+async def _create_response(ws) -> None:
+    """Fire response.create, but never while a response is already active — the
+    Realtime API rejects that with conversation_already_has_active_response."""
+    global _response_inflight
+    if _response_inflight:
+        _log("skip response.create (already in flight)")
+        return
+    _response_inflight = True
+    await ws.send(_EVT_RESPONSE_CREATE)
 _in_stream = None       # input stream handle (on-demand in hotkey mode)
 _in_dev = None          # chosen input device index
 
@@ -435,11 +460,36 @@ async def mic_pump(ws):
             return  # socket closed (shutdown / 60-min cap) — exit cleanly
 
 
+_stdin_q: "queue.Queue[str]" = queue.Queue()
+_stdin_reader_started = False
+
+
+def _ensure_stdin_reader() -> None:
+    """Read stdin lines on a single daemon thread. Daemon so a blocked readline
+    never holds up interpreter shutdown on Ctrl-C; started once (ptt_console is
+    recreated on every reconnect)."""
+    global _stdin_reader_started
+    if _stdin_reader_started:
+        return
+    _stdin_reader_started = True
+
+    def _reader():
+        for line in sys.stdin:
+            _stdin_q.put(line)
+
+    threading.Thread(target=_reader, daemon=True).start()
+
+
 async def ptt_console(ws):
     global _listening
     loop = asyncio.get_running_loop()
+    _ensure_stdin_reader()
     while True:
-        await loop.run_in_executor(None, sys.stdin.readline)
+        try:
+            # poll with a timeout so this task cancels promptly on shutdown
+            await loop.run_in_executor(None, lambda: _stdin_q.get(timeout=0.25))
+        except queue.Empty:
+            continue
         if _speaking or _play_buf:
             continue
         await ws.send(json.dumps({"type": "input_audio_buffer.clear"}))
@@ -464,7 +514,11 @@ async def hotkey_console(ws):
     global _listening, _speaking
     loop = asyncio.get_running_loop()
     while True:
-        ev = await loop.run_in_executor(None, key_events.get)
+        try:
+            # poll with a timeout so this task cancels promptly on shutdown
+            ev = await loop.run_in_executor(None, lambda: key_events.get(timeout=0.25))
+        except queue.Empty:
+            continue
         global _t_release
         if ev == "down":
             if _speaking or _play_buf:
@@ -486,7 +540,7 @@ async def hotkey_console(ws):
             _write_hud(False, 0.0)         # clear the waveform (mic_pump won't, it's now idle)
             _t_release = time.monotonic()
             await ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
-            await ws.send(_EVT_RESPONSE_CREATE)
+            await _create_response(ws)
             print("⏳ thinking…", flush=True)
 
 
@@ -534,7 +588,7 @@ async def _ipc_text_input(ws, text: str) -> None:
             "content": [{"type": "input_text", "text": text}],
         },
     }))
-    await ws.send(_EVT_RESPONSE_CREATE)
+    await _create_response(ws)
     print(f"\n⌨  TEXT: {text!r}", flush=True)
     _log(f"TEXT {text!r}")
     if _session:
@@ -604,18 +658,21 @@ async def _handle_transcription(ws, ev: dict) -> None:
             if _session:
                 _session.wake(heard)
             await _inject_capability_context(ws, heard)
-            await ws.send(_EVT_RESPONSE_CREATE)
+            await _create_response(ws)
         else:
             print(f"\n·  ignored (no wake word): {heard!r}", flush=True)
             _log(f"IGNORED {heard!r}")
             if _session:
                 _session.ignored(heard)
     else:
+        if not heard:
+            return
         print(f"\n🗣  HEARD: {heard!r}", flush=True)
         _log(f"HEARD {heard!r}")
         await _inject_capability_context(ws, heard)
-        if _ipc:
-            await ws.send(_EVT_RESPONSE_CREATE)
+        # PTT and IPC both fire the response themselves (after context injection)
+        # so the model is grounded; the server's auto-response is disabled.
+        await _create_response(ws)
 
 
 async def _run_incremental_learner(turn: dict, near_miss_id: "str | None") -> None:
@@ -658,6 +715,7 @@ async def _run_incremental_learner(turn: dict, near_miss_id: "str | None") -> No
 
 
 async def _handle_tool_call(ws, ev: dict) -> None:
+    global _response_inflight
     name = ev["name"]
     call_id = ev["call_id"]
     try:
@@ -692,11 +750,14 @@ async def _handle_tool_call(ws, ev: dict) -> None:
         "item": {"type": "function_call_output", "call_id": call_id,
                  "output": json.dumps(result)},
     }))
-    await ws.send(_EVT_RESPONSE_CREATE)
+    # The response that emitted this tool call is finishing; clear the guard so
+    # the required follow-up response (the spoken confirmation) always fires.
+    _response_inflight = False
+    await _create_response(ws)
 
 
 async def receive(ws):
-    global _speaking, _listening, _text_input_inflight
+    global _speaking, _listening, _text_input_inflight, _response_inflight
     _NOISY = {"response.output_audio.delta", "response.output_audio_transcript.delta"}
     async for raw in ws:
         ev = json.loads(raw)
@@ -723,6 +784,7 @@ async def receive(ws):
         elif t in ("response.done", "response.output_audio.done"):
             _speaking = False
             _text_input_inflight = False
+            _response_inflight = False
             if PTT and t == "response.done":
                 print("\n— press ENTER to talk —", flush=True)
         elif t == "conversation.item.input_audio_transcription.completed":
@@ -733,6 +795,7 @@ async def receive(ws):
             await _handle_tool_call(ws, ev)
         elif t == "error":
             _text_input_inflight = False
+            _response_inflight = False
             err = ev.get("error", ev)
             print("\n[realtime error]", json.dumps(err), flush=True)
             _log("ERROR " + json.dumps(err))
@@ -819,11 +882,23 @@ async def main():
     out_stream.start()
     if not HOTKEY_MODE:
         _open_mic()
+
+    # Graceful shutdown: a SIGINT/SIGTERM handler sets this event instead of
+    # letting KeyboardInterrupt tear through asyncio's cleanup (which produced the
+    # ugly traceback). Repeated Ctrl-C just re-sets the event, so it's harmless.
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for _sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(_sig, stop_event.set)
+        except (NotImplementedError, RuntimeError, ValueError):
+            pass  # not supported on this platform/thread
+
     try:
         # The Realtime API caps a session at 60 minutes, so reconnect forever and
         # re-init the session — the listener stays alive across the cap and any
         # transient network drop.
-        while True:
+        while not stop_event.is_set():
             try:
                 async with websockets.connect(
                     URL, additional_headers=headers, max_size=None
@@ -878,11 +953,18 @@ async def main():
                         tasks.append(asyncio.create_task(hotkey_console(ws)))
                     # reconnect as soon as ANY task ends (e.g. receive() returns
                     # when the 60-min session closes) — don't wait on idle tasks.
-                    await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                    # Also wake on the shutdown signal so Ctrl-C exits cleanly.
+                    stop_waiter = asyncio.create_task(stop_event.wait())
+                    await asyncio.wait(
+                        [*tasks, stop_waiter], return_when=asyncio.FIRST_COMPLETED)
+                    stop_waiter.cancel()
                     for t in tasks:
                         t.cancel()
+                    await asyncio.gather(*tasks, stop_waiter, return_exceptions=True)
             except (websockets.ConnectionClosed, OSError) as e:
                 _log(f"conn err {getattr(e, 'code', '')}")
+            if stop_event.is_set():
+                break
             # reset per-connection state, drain stale audio, reconnect
             _speaking = False
             _listening = WAKE_MODE
@@ -916,6 +998,7 @@ async def main():
                     print(f"💡 learned {added} memory update(s) this session", flush=True)
             except Exception as e:  # noqa: BLE001
                 print(f"[retrospective] failed: {e}", flush=True)
+        print("\nbye.", flush=True)
 
 
 def _get_recent_phrases(limit: int = 10) -> list[dict]:

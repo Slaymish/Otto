@@ -13,7 +13,7 @@
       "open Google Chrome"
     ],
     "primitive": "run_applescript",
-    "template": "tell application \"{app}\" to activate\ntell application \"System Events\" to open application \"{app}\""
+    "template": "tell application \"{app}\" to activate"
   },
   {
     "id": "spotify-play-search",
