@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let bridge = PythonBridge()
     private var paletteController: PaletteController?
     private var journalController: JournalController?
+    private var settingsController: SettingsController?
+    private var menuBarController: MenuBarController?
     private var hotkeyManager: HotkeyManager?
     private var pythonProcess: Process?
     private var stdoutPipe: Pipe?
@@ -70,14 +72,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startMainApp() {
         paletteController = PaletteController(bridge: bridge)
         journalController = JournalController(bridge: bridge)
+        settingsController = SettingsController(onSaved: { [weak self] in self?.restartPython() })
 
         paletteController?.onOpenJournal = { [weak self] in self?.journalController?.show() }
+
+        let menuBar = MenuBarController()
+        menuBar.onOpenSearch = { [weak self] in self?.paletteController?.show() }
+        menuBar.onOpenJournal = { [weak self] in self?.journalController?.show() }
+        menuBar.onOpenSettings = { [weak self] in self?.settingsController?.show() }
+        menuBar.onQuit = { NSApp.terminate(nil) }
+        menuBar.install()
+        menuBarController = menuBar
 
         hotkeyManager = HotkeyManager(onToggle: { [weak self] in
             self?.paletteController?.toggle()
         })
         hotkeyManager?.register()
 
+        launchPython()
+    }
+
+    // MARK: - Restart backend (e.g. after settings change)
+
+    /// Tears down the running Python subprocess and relaunches it so freshly saved
+    /// settings (read once at launch via env) take effect.
+    private func restartPython() {
+        bridge.disconnect()
+        if let proc = pythonProcess {
+            proc.terminationHandler = nil
+            proc.terminate()
+        }
+        pythonProcess = nil
+        stdoutPipe?.fileHandleForReading.readabilityHandler = nil
+        stdoutPipe = nil
         launchPython()
     }
 

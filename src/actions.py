@@ -33,9 +33,23 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
+from collections import namedtuple
 
 import config
+
+# ---------------------------------------------------------------------------
+# In-process AppleScript via NSAppleScript — eliminates fork/exec per call.
+# Falls back to subprocess osascript if PyObjC is unavailable.
+# ---------------------------------------------------------------------------
+_OsaResult = namedtuple("_OsaResult", ["stdout", "returncode", "stderr"])
+
+try:
+    from Foundation import NSAppleScript as _NSAppleScript  # type: ignore[import]
+    _APPLESCRIPT_NATIVE = True
+except ImportError:
+    _APPLESCRIPT_NATIVE = False
 
 AGENT_DESKTOP = shutil.which("agent-desktop") or "agent-desktop"
 
@@ -62,8 +76,33 @@ def _run(cmd: list[str], timeout: int = 20) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
-def _osa(script: str, timeout: int = 20) -> subprocess.CompletedProcess:
-    return _run(["osascript", "-e", script], timeout=timeout)
+def _osa(script: str, timeout: int = 20) -> _OsaResult:
+    """Execute an AppleScript in-process via NSAppleScript (no fork/exec overhead).
+    Falls back to subprocess osascript when PyObjC is unavailable.
+
+    executeAndReturnError_(None) returns a 2-tuple (descriptor | None, error_dict | None).
+    """
+    if _APPLESCRIPT_NATIVE:
+        result: list[_OsaResult] = []
+
+        def _exec() -> None:
+            ns = _NSAppleScript.alloc().initWithSource_(script)
+            desc, err = ns.executeAndReturnError_(None)
+            if desc is None:
+                msg = str(err.get("NSAppleScriptErrorMessage", "")) if err else ""
+                result.append(_OsaResult("", 1, msg))
+            else:
+                result.append(_OsaResult(desc.stringValue() or "", 0, ""))
+
+        t = threading.Thread(target=_exec, daemon=True)
+        t.start()
+        t.join(timeout)
+        if not result:
+            return _OsaResult("", 1, "AppleScript timed out")
+        return result[0]
+
+    p = _run(["osascript", "-e", script], timeout=timeout)
+    return _OsaResult(p.stdout or "", p.returncode, p.stderr or "")
 
 
 def _ad(args: list[str], timeout: int = 20) -> dict:
@@ -311,11 +350,10 @@ def read_frontmost_screen() -> dict:
     Returns {"status": "ok"|"skip"|"empty"|"error", "app": str, "text": str}.
     """
     try:
-        p = subprocess.run(
-            ["osascript", "-e",
-             'tell application "System Events" to get name of '
-             'first process whose frontmost is true'],
-            capture_output=True, text=True, timeout=3,
+        p = _osa(
+            'tell application "System Events" to get name of '
+            'first process whose frontmost is true',
+            timeout=3,
         )
         app = p.stdout.strip()
         # Skip the Otto palette itself and bare Python processes

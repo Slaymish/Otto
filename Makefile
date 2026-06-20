@@ -16,10 +16,12 @@ SOURCES := \
 	Otto/Otto/OttoApp.swift        \
 	Otto/Otto/CommandPalette.swift \
 	Otto/Otto/HotkeyManager.swift  \
+	Otto/Otto/MenuBarController.swift \
 	Otto/Otto/PythonBridge.swift   \
 	Otto/Otto/WaveformView.swift   \
 	Otto/Otto/JournalWindow.swift  \
 	Otto/Otto/SettingsStore.swift  \
+	Otto/Otto/SettingsWindow.swift \
 	Otto/Otto/SetupEngine.swift    \
 	Otto/Otto/OnboardingView.swift
 

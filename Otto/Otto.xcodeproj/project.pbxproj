@@ -13,6 +13,11 @@
 		AA000002000000000000004D /* PythonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000004D /* PythonBridge.swift */; };
 		AA000002000000000000005E /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000005E /* HotkeyManager.swift */; };
 		AA000002000000000000009C /* JournalWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000009C /* JournalWindow.swift */; };
+		AA00000200000000000000A1 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000A1 /* SettingsStore.swift */; };
+		AA00000200000000000000A2 /* SetupEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000A2 /* SetupEngine.swift */; };
+		AA00000200000000000000A3 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000A3 /* OnboardingView.swift */; };
+		AA00000200000000000000A4 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000A4 /* MenuBarController.swift */; };
+		AA00000200000000000000A5 /* SettingsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000A5 /* SettingsWindow.swift */; };
 		AA00000F000000000000004D /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000001A /* AppKit.framework */; };
 		AA00000F000000000000005E /* Network.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000002B /* Network.framework */; };
 		AA00000F000000000000006F /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000003C /* Carbon.framework */; };
@@ -25,6 +30,11 @@
 		AA000001000000000000004D /* PythonBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonBridge.swift; sourceTree = "<group>"; };
 		AA000001000000000000005E /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		AA000001000000000000009C /* JournalWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalWindow.swift; sourceTree = "<group>"; };
+		AA00000100000000000000A1 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		AA00000100000000000000A2 /* SetupEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupEngine.swift; sourceTree = "<group>"; };
+		AA00000100000000000000A3 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		AA00000100000000000000A4 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
+		AA00000100000000000000A5 /* SettingsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindow.swift; sourceTree = "<group>"; };
 		AA000001000000000000006F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA000001000000000000007A /* Otto.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Otto.entitlements; sourceTree = "<group>"; };
 		AA000001000000000000008B /* Otto.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Otto.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -65,6 +75,11 @@
 				AA000001000000000000004D /* PythonBridge.swift */,
 				AA000001000000000000005E /* HotkeyManager.swift */,
 				AA000001000000000000009C /* JournalWindow.swift */,
+				AA00000100000000000000A1 /* SettingsStore.swift */,
+				AA00000100000000000000A2 /* SetupEngine.swift */,
+				AA00000100000000000000A3 /* OnboardingView.swift */,
+				AA00000100000000000000A4 /* MenuBarController.swift */,
+				AA00000100000000000000A5 /* SettingsWindow.swift */,
 				AA000001000000000000006F /* Info.plist */,
 				AA000001000000000000007A /* Otto.entitlements */,
 			);
@@ -158,6 +173,11 @@
 				AA000002000000000000004D /* PythonBridge.swift in Sources */,
 				AA000002000000000000005E /* HotkeyManager.swift in Sources */,
 				AA000002000000000000009C /* JournalWindow.swift in Sources */,
+				AA00000200000000000000A1 /* SettingsStore.swift in Sources */,
+				AA00000200000000000000A2 /* SetupEngine.swift in Sources */,
+				AA00000200000000000000A3 /* OnboardingView.swift in Sources */,
+				AA00000200000000000000A4 /* MenuBarController.swift in Sources */,
+				AA00000200000000000000A5 /* SettingsWindow.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
