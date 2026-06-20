@@ -16,7 +16,10 @@ struct OttoApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    private let bridge = PythonBridge()
+    // When launched with --swift-engine this is an OttoEngine; otherwise PythonBridge.
+    private let bridge: any OttoBridge
+    private let swiftEngineMode: Bool
+
     let updateChecker = UpdateChecker()
     private var paletteController: PaletteController?
     private var journalController: JournalController?
@@ -28,6 +31,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var stdoutPipe: Pipe?
     private var onboardingWindow: NSWindow?
     private var updateTimer: Timer?
+
+    override init() {
+        swiftEngineMode = CommandLine.arguments.contains("--swift-engine")
+        if swiftEngineMode {
+            bridge = OttoEngine()
+        } else {
+            bridge = PythonBridge()
+        }
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("[Otto] app started")
@@ -43,7 +56,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        pythonProcess?.terminate()
+        if swiftEngineMode {
+            (bridge as? OttoEngine)?.stop()
+        } else {
+            pythonProcess?.terminate()
+        }
     }
 
     // MARK: - Onboarding
@@ -108,7 +125,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         registerHotkeys()
 
-        launchPython()
+        if swiftEngineMode {
+            (bridge as? OttoEngine)?.start()
+            print("[Otto] running with native Swift engine (--swift-engine)")
+        } else {
+            launchPython()
+        }
     }
 
     // MARK: - Restart backend (e.g. after settings change)
@@ -116,7 +138,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Tears down the running Python subprocess and relaunches it so freshly saved
     /// settings (read once at launch via env) take effect.
     private func restartPython() {
-        bridge.disconnect()
+        if swiftEngineMode {
+            (bridge as? OttoEngine)?.stop()
+            (bridge as? OttoEngine)?.start()
+            return
+        }
+        (bridge as? PythonBridge)?.disconnect()
         if let proc = pythonProcess {
             proc.terminationHandler = nil
             proc.terminate()
@@ -258,7 +285,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard !data.isEmpty, let line = String(data: data, encoding: .utf8) else { return }
             for part in line.components(separatedBy: "\n") {
                 if part.hasPrefix("IPC_PORT="), let port = UInt16(part.dropFirst("IPC_PORT=".count)) {
-                    DispatchQueue.main.async { self?.bridge.connect(port: port) }
+                    DispatchQueue.main.async { (self?.bridge as? PythonBridge)?.connect(port: port) }
                 }
             }
         }

@@ -8,9 +8,9 @@ import AppKit
 /// Opened by ⌥⇧Space or the "Edit" button in the learned-nudge chip.
 final class JournalController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
-    private let bridge: PythonBridge
+    private let bridge: any OttoBridge
 
-    init(bridge: PythonBridge) {
+    init(bridge: any OttoBridge) {
         self.bridge = bridge
         super.init()
     }
@@ -50,7 +50,7 @@ final class JournalController: NSObject, NSWindowDelegate {
 // MARK: - Journal view
 
 struct JournalView: View {
-    var bridge: PythonBridge
+    var bridge: any OttoBridge
 
     var body: some View {
         VStack(spacing: 0) {
@@ -119,7 +119,7 @@ struct JournalView: View {
 
 struct JournalCardRow: View {
     let card: JournalCard
-    var bridge: PythonBridge
+    var bridge: any OttoBridge
 
     @State private var isEditing = false
     @State private var editDesc = ""

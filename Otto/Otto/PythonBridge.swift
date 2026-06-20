@@ -2,41 +2,10 @@ import Foundation
 import Network
 import Observation
 
-struct RecentPhrase: Equatable {
-    let phrase: String
-    let count: Int
-}
-
-struct LearnedEvent: Equatable {
-    let id: String
-    let action: String      // "new_capability" | "added_phrasing"
-    let phrase: String
-    let description: String
-    let primitive: String
-}
-
-struct JournalHeader: Equatable {
-    let capabilities: Int
-    let learned: Int
-    let commands: Int
-}
-
-struct JournalCard: Identifiable, Equatable {
-    let id: String
-    let description: String
-    let examples: [String]
-    let primitive: String
-    let template: String
-    let origin: String       // "learned" | "shipped"
-    let learnedAt: String?
-    let timesUsed: Int
-    let lastUsed: String?
-    let confidence: Double
-}
-
 /// Manages the TCP connection to the Python backend and publishes state for the UI.
+/// Shared data types (RecentPhrase, LearnedEvent, etc.) live in OttoBridge.swift.
 @Observable
-final class PythonBridge {
+final class PythonBridge: OttoBridge {
 
     // MARK: - Published state (read by SwiftUI views)
     var micLevel: Float = 0

@@ -22,7 +22,11 @@ SOURCES := \
 	Otto/Otto/CommandPalette.swift \
 	Otto/Otto/HotkeyManager.swift  \
 	Otto/Otto/MenuBarController.swift \
+	Otto/Otto/OttoBridge.swift     \
 	Otto/Otto/PythonBridge.swift   \
+	Otto/Otto/AudioEngine.swift    \
+	Otto/Otto/ActionEngine.swift   \
+	Otto/Otto/OttoEngine.swift     \
 	Otto/Otto/WaveformView.swift   \
 	Otto/Otto/JournalWindow.swift  \
 	Otto/Otto/SettingsStore.swift  \
@@ -56,6 +60,7 @@ $(BINARY): $(SOURCES) | $(APP)/Contents/MacOS
 	    -target "$(TARGET)" \
 	    -framework Carbon \
 	    -framework ServiceManagement \
+	    -framework AVFoundation \
 	    $(SDK_FLAGS) \
 	    -O \
 	    -o "$@"

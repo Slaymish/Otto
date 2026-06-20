@@ -27,6 +27,11 @@
 		AA00000F000000000000004D /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000001A /* AppKit.framework */; };
 		AA00000F000000000000005E /* Network.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000002B /* Network.framework */; };
 		AA00000F000000000000006F /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000003C /* Carbon.framework */; };
+		AA00000200000000000000C0 /* OttoBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000C0 /* OttoBridge.swift */; };
+		AA00000200000000000000C1 /* AudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000C1 /* AudioEngine.swift */; };
+		AA00000200000000000000C2 /* OttoEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000C2 /* OttoEngine.swift */; };
+		AA00000200000000000000C3 /* ActionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000C3 /* ActionEngine.swift */; };
+		AA00000F00000000000000C1 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F00000000000000C0 /* AVFoundation.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -53,6 +58,11 @@
 		AA00000F000000000000001A /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		AA00000F000000000000002B /* Network.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Network.framework; path = System/Library/Frameworks/Network.framework; sourceTree = SDKROOT; };
 		AA00000F000000000000003C /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
+		AA00000100000000000000C0 /* OttoBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttoBridge.swift; sourceTree = "<group>"; };
+		AA00000100000000000000C1 /* AudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngine.swift; sourceTree = "<group>"; };
+		AA00000100000000000000C2 /* OttoEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttoEngine.swift; sourceTree = "<group>"; };
+		AA00000100000000000000C3 /* ActionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionEngine.swift; sourceTree = "<group>"; };
+		AA00000F00000000000000C0 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -63,6 +73,7 @@
 				AA00000F000000000000004D /* AppKit.framework in Frameworks */,
 				AA00000F000000000000005E /* Network.framework in Frameworks */,
 				AA00000F000000000000006F /* Carbon.framework in Frameworks */,
+				AA00000F00000000000000C1 /* AVFoundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -98,6 +109,10 @@
 				AA00000100000000000000B6 /* CapabilityKind.swift */,
 				AA00000100000000000000B4 /* OrbView.swift */,
 				AA00000100000000000000B5 /* CapabilityHalo.swift */,
+				AA00000100000000000000C0 /* OttoBridge.swift */,
+				AA00000100000000000000C1 /* AudioEngine.swift */,
+				AA00000100000000000000C2 /* OttoEngine.swift */,
+				AA00000100000000000000C3 /* ActionEngine.swift */,
 				AA000001000000000000006F /* Info.plist */,
 				AA000001000000000000007A /* Otto.entitlements */,
 			);
@@ -118,6 +133,7 @@
 				AA00000F000000000000001A /* AppKit.framework */,
 				AA00000F000000000000002B /* Network.framework */,
 				AA00000F000000000000003C /* Carbon.framework */,
+				AA00000F00000000000000C0 /* AVFoundation.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -202,6 +218,10 @@
 				AA00000200000000000000B6 /* CapabilityKind.swift in Sources */,
 				AA00000200000000000000B4 /* OrbView.swift in Sources */,
 				AA00000200000000000000B5 /* CapabilityHalo.swift in Sources */,
+				AA00000200000000000000C0 /* OttoBridge.swift in Sources */,
+				AA00000200000000000000C1 /* AudioEngine.swift in Sources */,
+				AA00000200000000000000C2 /* OttoEngine.swift in Sources */,
+				AA00000200000000000000C3 /* ActionEngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
