@@ -56,6 +56,7 @@ except ImportError:
 _session: "SessionLog | None" = None
 _cap_index: "_retrieval.CapabilityIndex | None" = None
 _ipc: "IPCServer | None" = None
+_last_turn: "dict | None" = None
 
 def _arg_value(flag, default=None):
     if flag in sys.argv:
@@ -503,6 +504,18 @@ async def _ipc_text_input(ws, text: str) -> None:
         _session.heard(text)
 
 
+def _should_learn(grounding: "str | None", status: str) -> bool:
+    """A successful tool call on a weakly-grounded turn is 'something new'."""
+    return grounding == "WEAK" and status == "ok"
+
+
+def _capability_id_for(last_turn: "dict | None") -> "str | None":
+    """The capability a turn used, only when retrieval was confident (STRONG)."""
+    if last_turn and last_turn.get("grounding") == "STRONG":
+        return last_turn.get("top_id")
+    return None
+
+
 async def _inject_capability_context(ws, transcript: str) -> None:
     """Retrieve relevant capabilities and inject as a system context item
     into the conversation before response.create fires."""
@@ -511,6 +524,13 @@ async def _inject_capability_context(ws, transcript: str) -> None:
     try:
         results = _cap_index.search(transcript, top_k=3)
         grounding = _cap_index.grounding(results)
+        global _last_turn
+        _last_turn = {
+            "query": transcript,
+            "grounding": grounding,
+            "top_id": results[0].capability.id if results else None,
+            "near_miss_id": _cap_index.near_miss_id(results),
+        }
         context = _cap_index.format_context(results, grounding)
         if not context:
             return
@@ -570,7 +590,8 @@ async def _handle_tool_call(ws, ev: dict) -> None:
     status = result.get("status", "?")
     print(f"✓  {status}" if status == "ok" else f"✗  {status}", flush=True)
     if _session:
-        _session.tool_call(name, args, result, exec_time)
+        _session.tool_call(name, args, result, exec_time,
+                           capability_id=_capability_id_for(_last_turn))
     if _ipc:
         _ipc.broadcast({"type": "tool_call", "name": name, "ok": status == "ok"})
     await ws.send(json.dumps({

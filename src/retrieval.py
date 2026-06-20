@@ -36,6 +36,10 @@ _EMBED_IDS_CACHE = _ROOT / "memory" / "embedding_ids.json"
 
 _MODEL_NAME = os.environ.get("VOICEOS_EMBED_MODEL", "all-MiniLM-L6-v2")
 
+_STRONG_FLOOR = 0.52
+_NEAR_FLOOR = 0.40
+_DOMINANCE = 1.35
+
 
 @dataclass
 class Capability:
@@ -231,9 +235,20 @@ class CapabilityIndex:
         top = results[0].score
         second = results[1].score if len(results) > 1 else 0.0
         # STRONG: high absolute score OR clear dominance over runner-up
-        if top >= 0.52 or (top >= 0.40 and top >= second * 1.35):
+        if top >= _STRONG_FLOOR or (top >= _NEAR_FLOOR and top >= second * _DOMINANCE):
             return "STRONG"
         return "WEAK"
+
+    def near_miss_id(self, results: list[SearchResult]) -> "str | None":
+        """For a WEAK turn, the top capability that is still a plausible same-intent
+        match (score in [_NEAR_FLOOR, _STRONG_FLOOR)). Lets a new phrasing be attached
+        deterministically — no model call. None if too weak to attribute."""
+        if not results:
+            return None
+        top = results[0]
+        if _NEAR_FLOOR <= top.score < _STRONG_FLOOR:
+            return top.capability.id
+        return None
 
     def format_context(self, results: list[SearchResult], grounding: str) -> str:
         """Format retrieved capabilities as a context block to inject per-turn."""

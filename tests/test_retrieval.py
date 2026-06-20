@@ -232,5 +232,16 @@ def test_search_matched_example_is_a_string(index):
         assert len(r.matched_example) > 0
 
 
+def test_near_miss_id_only_in_band():
+    from retrieval import CapabilityIndex, SearchResult, Capability
+    idx = object.__new__(CapabilityIndex)  # bypass __init__ (no model load)
+    cap = Capability(id="thing", description="d", examples=[],
+                     primitive="open_url", template="t")
+    assert idx.near_miss_id([SearchResult(cap, 0.45, "x")]) == "thing"   # in band
+    assert idx.near_miss_id([SearchResult(cap, 0.60, "x")]) is None       # strong, not a near miss
+    assert idx.near_miss_id([SearchResult(cap, 0.30, "x")]) is None       # too weak
+    assert idx.near_miss_id([]) is None
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

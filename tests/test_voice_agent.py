@@ -132,5 +132,20 @@ def test_is_wake_normalises_punctuation_to_space():
     assert is_wake("hey-chat open spotify")
 
 
+def test_should_learn_only_on_weak_success():
+    import voice_agent as va
+    assert va._should_learn("WEAK", "ok") is True
+    assert va._should_learn("STRONG", "ok") is False
+    assert va._should_learn("WEAK", "error") is False
+    assert va._should_learn(None, "ok") is False
+
+
+def test_capability_id_for_only_when_strong():
+    import voice_agent as va
+    assert va._capability_id_for({"grounding": "STRONG", "top_id": "web-search"}) == "web-search"
+    assert va._capability_id_for({"grounding": "WEAK", "top_id": "web-search"}) is None
+    assert va._capability_id_for(None) is None
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
