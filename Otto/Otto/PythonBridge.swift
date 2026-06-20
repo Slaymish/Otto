@@ -2,6 +2,11 @@ import Foundation
 import Network
 import Observation
 
+struct RecentPhrase: Equatable {
+    let phrase: String
+    let count: Int
+}
+
 struct LearnedEvent: Equatable {
     let id: String
     let action: String      // "new_capability" | "added_phrasing"
@@ -43,6 +48,7 @@ final class PythonBridge {
     var learnedEvent: LearnedEvent?
     var journalHeader: JournalHeader?
     var journalCards: [JournalCard] = []
+    var recentPhrases: [RecentPhrase] = []
 
     // MARK: - Private
     private var connection: NWConnection?
@@ -86,6 +92,7 @@ final class PythonBridge {
     }
 
     func requestJournal() { send(["type": "request_journal"]) }
+    func requestSuggestions() { send(["type": "request_suggestions"]) }
     func undoLearning(_ id: String) { send(["type": "undo_learning", "id": id]) }
     func deleteCapability(_ id: String) { send(["type": "delete_capability", "id": id]) }
     func editCapability(_ id: String, description: String?, examples: [String]?) {
@@ -149,6 +156,13 @@ final class PythonBridge {
                     phrase: (obj["phrase"] as? String) ?? "",
                     description: (obj["description"] as? String) ?? "",
                     primitive: (obj["primitive"] as? String) ?? "")
+            case "suggestions":
+                let recent = (obj["recent"] as? [[String: Any]]) ?? []
+                self.recentPhrases = recent.compactMap { item in
+                    guard let phrase = item["phrase"] as? String,
+                          let count = (item["count"] as? NSNumber)?.intValue else { return nil }
+                    return RecentPhrase(phrase: phrase, count: count)
+                }
             case "journal":
                 if let header = obj["header"] as? [String: Any] {
                     self.journalHeader = JournalHeader(

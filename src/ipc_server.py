@@ -16,6 +16,7 @@ Swift → Python messages:
   {"type": "voice_stop"}
   {"type": "text_input", "text": "open spotify"}
   {"type": "request_journal"}
+  {"type": "request_suggestions"}
   {"type": "undo_learning", "id": "<capability-id>"}
   {"type": "edit_capability", "id": "<capability-id>", "description": "...", "examples": [...]}
   {"type": "delete_capability", "id": "<capability-id>"}
@@ -39,6 +40,7 @@ class IPCServer:
         self.on_voice_stop: Callable | None = None
         self.on_text_input: Callable[[str], None] | None = None
         self.on_request_journal: Callable | None = None
+        self.on_request_suggestions: Callable | None = None
         self.on_undo_learning: Callable[[str], None] | None = None
         self.on_edit_capability: Callable[[str, "str | None", "list | None"], None] | None = None
         self.on_delete_capability: Callable[[str], None] | None = None
@@ -100,6 +102,8 @@ class IPCServer:
                 self.on_text_input(text)
         elif t == "request_journal" and self.on_request_journal:
             self.on_request_journal()
+        elif t == "request_suggestions" and self.on_request_suggestions:
+            self.on_request_suggestions()
         elif t == "undo_learning" and self.on_undo_learning:
             cid = (msg.get("id") or "").strip()
             if cid:

@@ -5,6 +5,22 @@ private extension Notification.Name {
     static let paletteDidShow = Notification.Name("OttoPaletteDidShow")
 }
 
+private enum SuggestionKind {
+    case recent(phrase: String, count: Int)
+    case capability(JournalCard)
+    case openJournal
+}
+
+private struct SuggestionItem: Identifiable {
+    let id: String
+    let label: String
+    let hint: String?
+    let icon: String
+    let badge: Int
+    let isNew: Bool
+    let kind: SuggestionKind
+}
+
 /// How long a spoken result lingers before it auto-clears (seconds).
 private let resultLingerSeconds: UInt64 = 8
 
@@ -18,6 +34,7 @@ struct CommandPalette: View {
 
     @State private var inputText = ""
     @State private var isHoldingMic = false
+    @State private var selectedIndex: Int? = nil
     @FocusState private var textFieldFocused: Bool
 
     var body: some View {
@@ -51,11 +68,17 @@ struct CommandPalette: View {
                     .padding(.bottom, 14)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
+
+            if showSuggestions {
+                suggestionSection
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
         }
         .animation(.spring(duration: 0.28, bounce: 0.08), value: bridge.waveformActive)
         .animation(.spring(duration: 0.28, bounce: 0.08), value: bridge.spokenText)
         .animation(.spring(duration: 0.28, bounce: 0.08), value: bridge.lastError)
         .animation(.spring(duration: 0.28, bounce: 0.08), value: bridge.learnedEvent)
+        .animation(.spring(duration: 0.22, bounce: 0.05), value: showSuggestions)
         .frame(width: 640)
         .background { paletteBackground }
         .shadow(color: .black.opacity(0.22), radius: 28, y: 10)
@@ -64,8 +87,12 @@ struct CommandPalette: View {
         .onAppear { textFieldFocused = true }
         .onReceive(NotificationCenter.default.publisher(for: .paletteDidShow)) { _ in
             inputText = ""
+            selectedIndex = nil
             textFieldFocused = true
+            bridge.requestJournal()
+            bridge.requestSuggestions()
         }
+        .onChange(of: inputText) { selectedIndex = nil }
         // Auto-clear a spoken result after it has lingered, so the palette
         // returns to a clean state instead of holding stale text.
         .task(id: bridge.spokenText) {
@@ -94,6 +121,23 @@ struct CommandPalette: View {
                 .textFieldStyle(.plain)
                 .focused($textFieldFocused)
                 .onSubmit { submitText() }
+                .onKeyPress(.upArrow) {
+                    guard showSuggestions else { return .ignored }
+                    if let idx = selectedIndex { selectedIndex = max(0, idx - 1) }
+                    else { selectedIndex = suggestions.count - 1 }
+                    return .handled
+                }
+                .onKeyPress(.downArrow) {
+                    guard showSuggestions else { return .ignored }
+                    if let idx = selectedIndex { selectedIndex = min(suggestions.count - 1, idx + 1) }
+                    else { selectedIndex = 0 }
+                    return .handled
+                }
+                .onKeyPress(.return) {
+                    guard let idx = selectedIndex, idx < suggestions.count else { return .ignored }
+                    handleSelect(suggestions[idx])
+                    return .handled
+                }
 
             micButton
         }
@@ -249,6 +293,195 @@ struct CommandPalette: View {
         bridge.lastError = nil
         bridge.sendText(text)
         inputText = ""
+    }
+
+    private func handleSelect(_ item: SuggestionItem) {
+        selectedIndex = nil
+        switch item.kind {
+        case .recent(let phrase, _):
+            bridge.spokenText = ""
+            bridge.lastError = nil
+            bridge.sendText(phrase)
+            inputText = ""
+        case .capability(let card):
+            bridge.spokenText = ""
+            bridge.lastError = nil
+            bridge.sendText(card.description)
+            inputText = ""
+        case .openJournal:
+            onOpenJournal()
+        }
+    }
+
+    // MARK: - Suggestions
+
+    private var showSuggestions: Bool {
+        !bridge.waveformActive && !isHoldingMic &&
+        bridge.spokenText.isEmpty && bridge.lastError == nil &&
+        bridge.learnedEvent == nil && !suggestions.isEmpty
+    }
+
+    private var suggestions: [SuggestionItem] {
+        let q = inputText.lowercased().trimmingCharacters(in: .whitespaces)
+        var items: [SuggestionItem] = []
+
+        if q.isEmpty {
+            let recentItems = bridge.recentPhrases.prefix(3).map { rp in
+                SuggestionItem(
+                    id: "recent::\(rp.phrase)",
+                    label: rp.phrase,
+                    hint: "recent",
+                    icon: "clock.arrow.circlepath",
+                    badge: rp.count,
+                    isNew: false,
+                    kind: .recent(phrase: rp.phrase, count: rp.count)
+                )
+            }
+            items.append(contentsOf: recentItems)
+
+            let recentSet = Set(bridge.recentPhrases.map { $0.phrase.lowercased() })
+            let capSlots = max(0, 5 - items.count)
+            let filteredCaps = bridge.journalCards.filter { !recentSet.contains($0.description.lowercased()) }
+            let sortedCaps = filteredCaps.sorted { a, b in
+                a.timesUsed != b.timesUsed ? a.timesUsed > b.timesUsed : a.confidence > b.confidence
+            }
+            let capItems: [SuggestionItem] = Array(sortedCaps.prefix(capSlots)).map { card in
+                SuggestionItem(
+                    id: "cap::\(card.id)",
+                    label: card.description,
+                    hint: card.examples.first,
+                    icon: Self.primitiveIcon(card.primitive),
+                    badge: card.timesUsed,
+                    isNew: card.origin == "learned",
+                    kind: .capability(card)
+                )
+            }
+            items.append(contentsOf: capItems)
+
+            items.append(SuggestionItem(
+                id: "__journal__",
+                label: "Open Journal",
+                hint: "Browse and edit what Otto knows",
+                icon: "book.closed",
+                badge: 0,
+                isNew: false,
+                kind: .openJournal
+            ))
+        } else {
+            let matchedCaps = bridge.journalCards.filter { card in
+                card.description.lowercased().contains(q) ||
+                card.examples.contains { $0.lowercased().contains(q) }
+            }
+            let sortedMatchedCaps = matchedCaps.sorted { $0.timesUsed > $1.timesUsed }
+            let capItems: [SuggestionItem] = Array(sortedMatchedCaps.prefix(5)).map { card in
+                SuggestionItem(
+                    id: "cap::\(card.id)",
+                    label: card.description,
+                    hint: card.examples.first(where: { $0.lowercased().contains(q) }),
+                    icon: Self.primitiveIcon(card.primitive),
+                    badge: card.timesUsed,
+                    isNew: card.origin == "learned",
+                    kind: .capability(card)
+                )
+            }
+            items.append(contentsOf: capItems)
+
+            let recentItems = bridge.recentPhrases
+                .filter { $0.phrase.lowercased().contains(q) }
+                .prefix(max(0, 6 - items.count))
+                .map { rp in
+                    SuggestionItem(
+                        id: "recent::\(rp.phrase)",
+                        label: rp.phrase,
+                        hint: nil,
+                        icon: "clock.arrow.circlepath",
+                        badge: rp.count,
+                        isNew: false,
+                        kind: .recent(phrase: rp.phrase, count: rp.count)
+                    )
+                }
+            items.append(contentsOf: recentItems)
+        }
+
+        return Array(items.prefix(6))
+    }
+
+    @ViewBuilder private var suggestionSection: some View {
+        Divider()
+            .padding(.horizontal, 2)
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, item in
+                    suggestionRow(item, isSelected: selectedIndex == index)
+                        .contentShape(Rectangle())
+                        .onTapGesture { handleSelect(item) }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .frame(maxHeight: 252)
+        .padding(.bottom, 6)
+    }
+
+    private func suggestionRow(_ item: SuggestionItem, isSelected: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: item.icon)
+                .font(.system(size: 13))
+                .foregroundStyle(isSelected ? .white : .secondary)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(item.label)
+                        .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                        .foregroundStyle(isSelected ? .white : .primary)
+                        .lineLimit(1)
+                    if item.isNew {
+                        Text("NEW")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(isSelected ? .white.opacity(0.85) : .white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(
+                                isSelected ? Color.white.opacity(0.3) : Color.accentColor,
+                                in: Capsule()
+                            )
+                    }
+                    Spacer(minLength: 0)
+                    if item.badge > 0 {
+                        Text("\(item.badge)\u{d7}")
+                            .font(.system(size: 11).monospacedDigit())
+                            .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
+                    }
+                }
+                if let hint = item.hint {
+                    Text(hint)
+                        .font(.system(size: 11))
+                        .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 7)
+        .background {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.accentColor)
+                    .padding(.horizontal, 8)
+            }
+        }
+    }
+
+    private static func primitiveIcon(_ primitive: String) -> String {
+        switch primitive {
+        case "run_applescript": return "terminal"
+        case "press_key":       return "keyboard"
+        case "read_screen":     return "eye"
+        case "open_url":        return "link"
+        case "obs_call":        return "record.circle"
+        default:                return "sparkles"
+        }
     }
 }
 

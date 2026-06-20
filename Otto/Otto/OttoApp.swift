@@ -19,7 +19,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var paletteController: PaletteController?
     private var journalController: JournalController?
     private var hotkeyManager: HotkeyManager?
-    private var journalHotkey: HotkeyManager?
     private var pythonProcess: Process?
     private var stdoutPipe: Pipe?
 
@@ -38,15 +37,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.paletteController?.toggle()
         })
         hotkeyManager?.register()
-
-        // ⌥⇧Space (id: 2) — journal; different id avoids Carbon handler-chain collision.
-        journalHotkey = HotkeyManager(
-            keyCode: 49,
-            modifiers: UInt32(optionKey) | UInt32(shiftKey),
-            id: 2,
-            onToggle: { [weak self] in self?.journalController?.toggle() }
-        )
-        journalHotkey?.register()
 
         launchPython()
     }

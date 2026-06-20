@@ -801,7 +801,15 @@ async def main():
                             _refresh_index()
                             _broadcast_journal()
 
+                        def _broadcast_suggestions():
+                            if _ipc:
+                                _ipc.broadcast({
+                                    "type": "suggestions",
+                                    "recent": _get_recent_phrases(),
+                                })
+
                         _ipc.on_request_journal = _broadcast_journal
+                        _ipc.on_request_suggestions = _broadcast_suggestions
                         _ipc.on_undo_learning = lambda cid: _after_change(learning_store.undo(cid))
                         _ipc.on_edit_capability = lambda cid, desc, ex: _after_change(
                             learning_store.edit_capability(cid, desc, ex))
@@ -858,6 +866,31 @@ async def main():
                     print(f"💡 learned {added} memory update(s) this session", flush=True)
             except Exception as e:  # noqa: BLE001
                 print(f"[retrospective] failed: {e}", flush=True)
+
+
+def _get_recent_phrases(limit: int = 10) -> list[dict]:
+    """Read the last few session logs and return the most-used wake phrases."""
+    import glob
+    import json as _json
+    from pathlib import Path
+
+    sessions_dir = Path(__file__).parent.parent / "memory" / "sessions"
+    if not sessions_dir.exists():
+        return []
+    files = sorted(sessions_dir.glob("*.jsonl"), reverse=True)[:5]
+    counts: dict[str, int] = {}
+    for f in files:
+        try:
+            for line in f.read_text(encoding="utf-8").splitlines():
+                ev = _json.loads(line)
+                if ev.get("event") == "wake":
+                    phrase = ev.get("phrase", "").strip()
+                    if phrase:
+                        counts[phrase] = counts.get(phrase, 0) + 1
+        except Exception:  # noqa: BLE001
+            continue
+    sorted_phrases = sorted(counts.items(), key=lambda kv: -kv[1])
+    return [{"phrase": p, "count": c} for p, c in sorted_phrases[:limit]]
 
 
 if __name__ == "__main__":
