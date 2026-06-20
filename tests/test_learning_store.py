@@ -36,3 +36,52 @@ def test_confidence_rises_with_use_and_success():
     assert abs(base - 0.5) < 1e-9
     # failures lower it
     assert ls.confidence(9, 0.0) < ls.confidence(9, 1.0)
+
+
+def test_apply_updates_new_capability_writes_event_and_journal(tmp_path, monkeypatch):
+    _point(monkeypatch, tmp_path)
+    events = ls.apply_updates([{
+        "id": "edit-setup", "examples": ["fire up my edit setup"],
+        "primitive": "run_applescript", "template": "tell application ...",
+        "description": "Open editing apps",
+    }])
+    assert len(events) == 1
+    ev = events[0]
+    assert ev.id == "edit-setup" and ev.action == "new_capability"
+    assert ev.phrase == "fire up my edit setup"
+    # capability is now live
+    caps = ls.load_user_caps()
+    assert any(c["id"] == "edit-setup" for c in caps)
+    # journal recorded with before=None
+    recs = ls.journal_records()
+    learned = [r for r in recs if r["event"] == "learned" and r["id"] == "edit-setup"]
+    assert learned and learned[-1]["before"] is None
+
+
+def test_apply_updates_added_phrasing_to_existing_user_cap(tmp_path, monkeypatch):
+    _point(monkeypatch, tmp_path)
+    ls.save_user_caps([{"id": "thing", "description": "d", "examples": ["foo"],
+                        "primitive": "open_url", "template": "http://x", "source": "learned"}])
+    events = ls.apply_updates([{"id": "thing", "examples": ["bar"]}])
+    assert len(events) == 1 and events[0].action == "added_phrasing"
+    assert "bar" in next(c for c in ls.load_user_caps() if c["id"] == "thing")["examples"]
+
+
+def test_undo_new_capability_removes_it(tmp_path, monkeypatch):
+    _point(monkeypatch, tmp_path)
+    ls.apply_updates([{"id": "edit-setup", "examples": ["x"],
+                       "primitive": "open_url", "template": "http://x",
+                       "description": "d"}])
+    assert ls.undo("edit-setup") is True
+    assert all(c["id"] != "edit-setup" for c in ls.load_user_caps())
+    # second undo is a no-op
+    assert ls.undo("edit-setup") is False
+
+
+def test_undo_added_phrasing_restores_prior_examples(tmp_path, monkeypatch):
+    _point(monkeypatch, tmp_path)
+    ls.save_user_caps([{"id": "thing", "description": "d", "examples": ["foo"],
+                        "primitive": "open_url", "template": "http://x", "source": "learned"}])
+    ls.apply_updates([{"id": "thing", "examples": ["bar"]}])
+    assert ls.undo("thing") is True
+    assert next(c for c in ls.load_user_caps() if c["id"] == "thing")["examples"] == ["foo"]

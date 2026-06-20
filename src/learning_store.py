@@ -84,3 +84,96 @@ def confidence(times_used: int, success_rate: float) -> float:
     usage = 1.0 - math.exp(-max(0, times_used) / 3.0)
     score = 0.5 * usage + 0.5 * max(0.0, min(1.0, success_rate))
     return round(min(1.0, score), 3)
+
+
+def _append_journal(record: dict) -> None:
+    record["t"] = round(time.time(), 3)
+    JOURNAL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(JOURNAL_PATH, "a") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def journal_records() -> list[dict]:
+    if not JOURNAL_PATH.exists():
+        return []
+    recs: list[dict] = []
+    try:
+        with open(JOURNAL_PATH) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    recs.append(json.loads(line))
+                except (ValueError, json.JSONDecodeError):
+                    continue
+    except OSError:
+        return []
+    return recs
+
+
+def apply_updates(updates: list[dict]) -> list[LearningEvent]:
+    """Merge learned updates into the user caps file, journaling before/after
+    for undo. Returns one LearningEvent per id that actually changed."""
+    import retrospective  # local import avoids any import cycle at module load
+
+    user = load_user_caps()
+    builtin = _load_json_list(BUILTIN_CAPS_PATH)
+    builtin_by_id = {c["id"]: c for c in builtin}
+    before_by_id = {c["id"]: copy.deepcopy(c) for c in user}
+
+    merged, _, _ = retrospective._merge_updates(user, builtin_by_id, updates)
+    merged_by_id = {c["id"]: c for c in merged}
+
+    events: list[LearningEvent] = []
+    seen: set[str] = set()
+    for up in updates:
+        cid = (up.get("id") or "").strip()
+        if not cid or cid in seen or cid not in merged_by_id:
+            continue
+        seen.add(cid)
+        after = merged_by_id[cid]
+        before = before_by_id.get(cid)
+        is_new = before is None and cid not in builtin_by_id
+        action = "new_capability" if is_new else "added_phrasing"
+        examples = [e for e in up.get("examples", []) if isinstance(e, str)]
+        phrase = examples[0] if examples else ""
+        learned_at = _now_iso()
+        learned_marker = {"event": "learned", "id": cid, "action": action,
+                          "phrase": phrase, "description": after.get("description", ""),
+                          "learned_at": learned_at,
+                          "before": before, "after": copy.deepcopy(after)}
+        _append_journal(learned_marker)
+        events.append(LearningEvent(
+            id=cid, action=action, phrase=phrase,
+            description=after.get("description", ""),
+            primitive=after.get("primitive", ""), learned_at=learned_at,
+        ))
+
+    save_user_caps(merged)
+    return events
+
+
+def undo(cap_id: str) -> bool:
+    """Revert the most recent not-yet-undone learned change for cap_id."""
+    recs = journal_records()
+    undone_refs = {r.get("ref") for r in recs if r.get("event") == "undone"}
+    last = None
+    for r in recs:
+        if r.get("event") == "learned" and r.get("id") == cap_id and r.get("t") not in undone_refs:
+            last = r
+    if last is None:
+        return False
+
+    caps = load_user_caps()
+    by_id = {c["id"]: c for c in caps}
+    if last.get("before") is None:
+        by_id.pop(cap_id, None)
+    else:
+        by_id[cap_id] = last["before"]
+    save_user_caps(list(by_id.values()))
+    _append_journal({"event": "undone", "id": cap_id, "ref": last.get("t")})
+    return True
