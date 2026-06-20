@@ -20,6 +20,7 @@
 		AA00000200000000000000A5 /* SettingsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000A5 /* SettingsWindow.swift */; };
 		AA00000200000000000000B1 /* HotkeyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000B1 /* HotkeyConfig.swift */; };
 		AA00000200000000000000B2 /* HotkeyRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000B2 /* HotkeyRecorderView.swift */; };
+		AA00000200000000000000B3 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000000000000B3 /* UpdateChecker.swift */; };
 		AA00000F000000000000004D /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000001A /* AppKit.framework */; };
 		AA00000F000000000000005E /* Network.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000002B /* Network.framework */; };
 		AA00000F000000000000006F /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000003C /* Carbon.framework */; };
@@ -39,6 +40,7 @@
 		AA00000100000000000000A5 /* SettingsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindow.swift; sourceTree = "<group>"; };
 		AA00000100000000000000B1 /* HotkeyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyConfig.swift; sourceTree = "<group>"; };
 		AA00000100000000000000B2 /* HotkeyRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyRecorderView.swift; sourceTree = "<group>"; };
+		AA00000100000000000000B3 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		AA000001000000000000006F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA000001000000000000007A /* Otto.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Otto.entitlements; sourceTree = "<group>"; };
 		AA000001000000000000008B /* Otto.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Otto.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -86,6 +88,7 @@
 				AA00000100000000000000A5 /* SettingsWindow.swift */,
 				AA00000100000000000000B1 /* HotkeyConfig.swift */,
 				AA00000100000000000000B2 /* HotkeyRecorderView.swift */,
+				AA00000100000000000000B3 /* UpdateChecker.swift */,
 				AA000001000000000000006F /* Info.plist */,
 				AA000001000000000000007A /* Otto.entitlements */,
 			);
@@ -186,6 +189,7 @@
 				AA00000200000000000000A5 /* SettingsWindow.swift in Sources */,
 				AA00000200000000000000B1 /* HotkeyConfig.swift in Sources */,
 				AA00000200000000000000B2 /* HotkeyRecorderView.swift in Sources */,
+				AA00000200000000000000B3 /* UpdateChecker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
