@@ -60,6 +60,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     apiKeySection
                     preferencesSection
+                    shortcutsSection
                 }
                 .padding(28)
             }
@@ -114,6 +115,20 @@ struct SettingsView: View {
                 labeledField("Browser", placeholder: "e.g. Chrome  (default: Safari)", binding: $store.browserName)
             }
             .padding(.top, 4)
+        }
+    }
+
+    private var shortcutsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Shortcuts")
+                .font(.headline)
+            HotkeyRecorderView(label: "Summon Otto", config: $store.summonHotkey)
+            HotkeyRecorderView(label: "Open Journal", config: $store.journalHotkey)
+            if store.summonHotkey == store.journalHotkey {
+                Text("Both shortcuts are the same \u{2014} only one will fire.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
         }
     }
 

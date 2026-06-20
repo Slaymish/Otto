@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsController: SettingsController?
     private var menuBarController: MenuBarController?
     private var hotkeyManager: HotkeyManager?
+    private var journalHotkeyManager: HotkeyManager?
     private var pythonProcess: Process?
     private var stdoutPipe: Pipe?
     private var onboardingWindow: NSWindow?
@@ -72,7 +73,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startMainApp() {
         paletteController = PaletteController(bridge: bridge)
         journalController = JournalController(bridge: bridge)
-        settingsController = SettingsController(onSaved: { [weak self] in self?.restartPython() })
+        settingsController = SettingsController(onSaved: { [weak self] in
+            self?.restartHotkeys()
+            self?.restartPython()
+        })
 
         paletteController?.onOpenJournal = { [weak self] in self?.journalController?.show() }
 
@@ -84,10 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.install()
         menuBarController = menuBar
 
-        hotkeyManager = HotkeyManager(onToggle: { [weak self] in
-            self?.paletteController?.toggle()
-        })
-        hotkeyManager?.register()
+        registerHotkeys()
 
         launchPython()
     }
@@ -106,6 +107,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stdoutPipe?.fileHandleForReading.readabilityHandler = nil
         stdoutPipe = nil
         launchPython()
+    }
+
+    // MARK: - Hotkeys
+
+    private func registerHotkeys() {
+        let summon = SettingsStore.shared.summonHotkey
+        let journal = SettingsStore.shared.journalHotkey
+
+        let s = HotkeyManager(keyCode: summon.keyCode, modifiers: summon.carbonModifiers, id: 1,
+                              onToggle: { [weak self] in self?.paletteController?.toggle() })
+        s.register()
+        hotkeyManager = s
+
+        let j = HotkeyManager(keyCode: journal.keyCode, modifiers: journal.carbonModifiers, id: 2,
+                              onToggle: { [weak self] in self?.journalController?.show() })
+        j.register()
+        journalHotkeyManager = j
+    }
+
+    /// Re-register both global hotkeys after a settings change (no Python restart needed).
+    func restartHotkeys() {
+        hotkeyManager?.unregister()
+        journalHotkeyManager?.unregister()
+        registerHotkeys()
     }
 
     // MARK: - Python subprocess
