@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Otto.app
+        run: make app
+
+      - name: Package release
+        run: |
+          TAG="${{ github.ref_name }}"
+          STAGING="release/Otto-${TAG}"
+          mkdir -p "${STAGING}"
+
+          # App bundle
+          cp -R Otto/build/Otto.app "${STAGING}/"
+
+          # Python backend (voice_agent.py walks up from the .app to find these)
+          cp -R src "${STAGING}/"
+          cp -R memory "${STAGING}/"
+          cp requirements.txt "${STAGING}/"
+          [ -f requirements-local.txt ] && cp requirements-local.txt "${STAGING}/"
+          cp run.sh "${STAGING}/"
+          cp README.md "${STAGING}/" 2>/dev/null || true
+
+          # Zip preserving symlinks and extended attributes
+          cd release
+          zip -r --symlinks "Otto-${TAG}.zip" "Otto-${TAG}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Otto ${{ github.ref_name }}"
+          files: release/Otto-${{ github.ref_name }}.zip
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            1. Download and unzip `Otto-${{ github.ref_name }}.zip`
+            2. Move the extracted folder anywhere you like (e.g. `~/Applications/Otto/`)
+            3. Add your `OPENAI_API_KEY` to a `.env` file inside that folder
+            4. Double-click `Otto.app` — or run `./run.sh --app` from a terminal
+
+            > **First launch:** macOS will block the app since it isn't notarized.
+            > Right-click → Open, then click Open in the dialog.
+
+            ## Requirements
+            - macOS 14+
+            - Python 3.10+ (for the voice backend — installed automatically by `run.sh`)
