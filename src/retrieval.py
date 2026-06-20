@@ -74,8 +74,9 @@ class SearchResult:
 class CapabilityIndex:
     """Loads capabilities, embeds examples, supports cosine search."""
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool = False, filter_by_installed: bool = True):
         self._verbose = verbose
+        self._filter_by_installed = filter_by_installed
         self._caps: list[Capability] = []
         # parallel arrays: one row per (capability, example) pair
         self._embeddings: np.ndarray | None = None
@@ -91,6 +92,21 @@ class CapabilityIndex:
     def _load_capabilities(self) -> None:
         caps: list[Capability] = []
 
+        if self._filter_by_installed:
+            try:
+                import system_scan as _ss
+                _installed: "set[str] | None" = _ss.installed_apps()
+            except Exception:  # noqa: BLE001
+                _installed = None  # scan failed — include everything
+        else:
+            _installed = None  # bypass filtering (e.g. for tests)
+
+        def _app_available(required: list[str]) -> bool:
+            """True if ANY required app is installed, no requirement, or scan failed."""
+            if not required or _installed is None:
+                return True
+            return any(r.lower() in _installed for r in required)
+
         def _load_file(path: Path, source: str) -> None:
             if not path.exists():
                 return
@@ -98,6 +114,8 @@ class CapabilityIndex:
                 with open(path) as f:
                     data = json.load(f)
                 for item in data:
+                    if not _app_available(item.get("required_apps", [])):
+                        continue
                     caps.append(Capability(
                         id=item["id"],
                         description=item["description"],

@@ -304,6 +304,33 @@ def read_screen_aloud(app: str = "Terminal") -> dict:
 
 
 
+def read_frontmost_screen() -> dict:
+    """Snapshot the frontmost non-Otto app for ambient screen context.
+
+    Called after each tool dispatch so the next turn has current screen state.
+    Returns {"status": "ok"|"skip"|"empty"|"error", "app": str, "text": str}.
+    """
+    try:
+        p = subprocess.run(
+            ["osascript", "-e",
+             'tell application "System Events" to get name of '
+             'first process whose frontmost is true'],
+            capture_output=True, text=True, timeout=3,
+        )
+        app = p.stdout.strip()
+        # Skip the Otto palette itself and bare Python processes
+        if not app or app.lower() in ("otto", "python", "python3", ""):
+            return {"status": "skip", "app": app, "text": ""}
+        res = _ad(["snapshot", "--app", app, "--compact"], timeout=10)
+        text = _extract_text(res.get("data", {}))
+        text = text[-800:].strip() if text else ""
+        if not text:
+            return {"status": "empty", "app": app, "text": ""}
+        return {"status": "ok", "app": app, "text": text}
+    except Exception as exc:  # noqa: BLE001
+        return {"status": "error", "app": "", "text": "", "error": str(exc)}
+
+
 def _force_electron_ax(app_name: str = "Claude"):
     """Force an Electron app (Claude Desktop) to build its accessibility tree, so
     agent-desktop can read/navigate it. Without this, Claude's tree is empty."""

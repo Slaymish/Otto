@@ -28,7 +28,10 @@ import retrieval  # noqa: E402
 
 @pytest.fixture(scope="module")
 def index():
-    return retrieval.CapabilityIndex(verbose=False)
+    # filter_by_installed=False: test against the full capability set regardless
+    # of what apps are installed on the test machine. Retrieval quality tests
+    # should not be coupled to the local environment.
+    return retrieval.CapabilityIndex(verbose=False, filter_by_installed=False)
 
 
 # ---------------------------------------------------------------------------

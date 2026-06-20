@@ -65,6 +65,7 @@ _cap_index: "_retrieval.CapabilityIndex | None" = None
 _ipc: "IPCServer | None" = None
 _last_turn: "dict | None" = None
 _learn_lock = asyncio.Lock()  # serialise store writes across concurrent novel commands
+_screen_cache: dict = {"status": "", "app": "", "text": "", "ts": 0.0}
 
 def _arg_value(flag, default=None):
     if flag in sys.argv:
@@ -108,10 +109,16 @@ def _build_instructions() -> str:
     _name = config.USER_NAME
     _hints = (" " + config.USER_HINTS.strip()) if config.USER_HINTS.strip() else ""
     _browser = config.WEB_BROWSER
+    try:
+        import system_scan
+        _sys_ctx = "\n" + system_scan.scan_system()
+    except Exception:  # noqa: BLE001
+        _sys_ctx = ""
     return (
         f"You are Otto, the voice assistant for {_name}'s Mac.{_hints}\n"
         f"The default browser is {_browser}.\n"
-        f"{_name} speaks a computer control command and you execute it.\n\n"
+        f"{_name} speaks a computer control command and you execute it.\n"
+        f"{_sys_ctx}\n"
         "TOOLS:\n"
         "  run_applescript(script)              - run any AppleScript\n"
         "  press_key(combo, app, repeat?)       - send a key to an app\n"
@@ -119,12 +126,16 @@ def _build_instructions() -> str:
         f"  open_url(url)                        - open a URL in {_browser}\n"
         "  obs_call(request_type, request_data) - control OBS via WebSocket\n\n"
         "CONTEXT: Before each response you receive RETRIEVED CAPABILITIES showing\n"
-        "the most relevant known recipes. Use them as your exact template.\n\n"
+        "the most relevant known recipes. Use them as your exact template.\n"
+        "You may also receive CURRENT SCREEN showing what is visible on screen —\n"
+        "use it as context when the command references what's on screen.\n\n"
         "RULES (follow strictly):\n"
         "- This is Otto, a voice assistant for the Mac, not a chatbot. ONLY respond to computer control commands.\n"
         "- If the command matches a STRONG retrieved capability: execute it immediately.\n"
         "- If grounding is WEAK or the command is ambiguous: say 'I can only run Mac\n"
         f"  commands — what would you like me to do?' and stop.\n"
+        "- For complex multi-step coding tasks (refactoring, building features, writing\n"
+        "  scripts): use the terminal-run capability to hand off to Claude Code.\n"
         "- NEVER answer general questions, chat, or act as an assistant.\n"
         "- After a tool returns status ok: one short confirmation sentence, then stop.\n"
         "- Never call the same tool twice in a row.\n"
@@ -380,6 +391,18 @@ def _drain_mic_queue() -> None:
             break
 
 
+async def _update_screen_cache() -> None:
+    """Capture the frontmost app's screen text after a tool call completes.
+    Runs as a background task so it never blocks the response path."""
+    try:
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, actions.read_frontmost_screen)
+        _screen_cache.update(result)
+        _screen_cache["ts"] = time.monotonic()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 async def dispatch_tool(name: str, args: dict) -> dict:
     fn = actions.TOOLS.get(name)
     if not fn:
@@ -548,6 +571,14 @@ async def _inject_capability_context(ws, transcript: str) -> None:
         context = _cap_index.format_context(results, grounding)
         if not context:
             return
+        # Prepend fresh screen context if captured within the last 60 seconds
+        screen_age = time.monotonic() - _screen_cache.get("ts", 0.0)
+        if _screen_cache.get("status") == "ok" and screen_age < 60:
+            screen_block = (
+                f"CURRENT SCREEN (app: {_screen_cache['app']}, "
+                f"captured {screen_age:.0f}s ago):\n{_screen_cache['text']}\n\n"
+            )
+            context = screen_block + context
         await ws.send(json.dumps({
             "type": "conversation.item.create",
             "item": {
@@ -644,6 +675,8 @@ async def _handle_tool_call(ws, ev: dict) -> None:
     exec_time = time.monotonic() - t0
     status = result.get("status", "?")
     print(f"✓  {status}" if status == "ok" else f"✗  {status}", flush=True)
+    # Capture screen state in background so next turn has ambient context
+    asyncio.create_task(_update_screen_cache())
     if _session:
         _session.tool_call(name, args, result, exec_time,
                            capability_id=_capability_id_for(_last_turn))
