@@ -13,9 +13,11 @@ struct OttoApp: App {
 }
 
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let bridge = PythonBridge()
+    let updateChecker = UpdateChecker()
     private var paletteController: PaletteController?
     private var journalController: JournalController?
     private var settingsController: SettingsController?
@@ -25,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pythonProcess: Process?
     private var stdoutPipe: Pipe?
     private var onboardingWindow: NSWindow?
+    private var updateTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("[Otto] app started")
@@ -73,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startMainApp() {
         paletteController = PaletteController(bridge: bridge)
         journalController = JournalController(bridge: bridge)
-        settingsController = SettingsController(onSaved: { [weak self] in
+        settingsController = SettingsController(updateChecker: updateChecker, onSaved: { [weak self] in
             self?.restartHotkeys()
             self?.restartPython()
         })
@@ -87,6 +90,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onQuit = { NSApp.terminate(nil) }
         menuBar.install()
         menuBarController = menuBar
+
+        // Updates: badge the menu when one is found; install on click.
+        updateChecker.onUpdateFound = { [weak self] in
+            self?.menuBarController?.setUpdateAvailable(self?.updateChecker.availableUpdate?.version)
+        }
+        menuBar.onInstallUpdate = { [weak self] in
+            Task { await self?.updateChecker.downloadAndInstall() }
+        }
+        if resourcesHaveBackend {
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                await self?.updateChecker.checkForUpdates()
+                self?.scheduleDailyUpdateCheck()
+            }
+        }
 
         registerHotkeys()
 
@@ -131,6 +149,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyManager?.unregister()
         journalHotkeyManager?.unregister()
         registerHotkeys()
+    }
+
+    private func scheduleDailyUpdateCheck() {
+        updateTimer?.invalidate()
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 86_400, repeats: true) { [weak self] _ in
+            Task { await self?.updateChecker.checkForUpdates() }
+        }
     }
 
     // MARK: - Python subprocess
