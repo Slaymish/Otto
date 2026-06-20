@@ -12,6 +12,7 @@
 		AA000002000000000000003C /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000003C /* WaveformView.swift */; };
 		AA000002000000000000004D /* PythonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000004D /* PythonBridge.swift */; };
 		AA000002000000000000005E /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000005E /* HotkeyManager.swift */; };
+		AA000002000000000000009C /* JournalWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000009C /* JournalWindow.swift */; };
 		AA00000F000000000000004D /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000001A /* AppKit.framework */; };
 		AA00000F000000000000005E /* Network.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000002B /* Network.framework */; };
 		AA00000F000000000000006F /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000F000000000000003C /* Carbon.framework */; };
@@ -23,6 +24,7 @@
 		AA000001000000000000003C /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
 		AA000001000000000000004D /* PythonBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonBridge.swift; sourceTree = "<group>"; };
 		AA000001000000000000005E /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
+		AA000001000000000000009C /* JournalWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalWindow.swift; sourceTree = "<group>"; };
 		AA000001000000000000006F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA000001000000000000007A /* Otto.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Otto.entitlements; sourceTree = "<group>"; };
 		AA000001000000000000008B /* Otto.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Otto.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -62,6 +64,7 @@
 				AA000001000000000000003C /* WaveformView.swift */,
 				AA000001000000000000004D /* PythonBridge.swift */,
 				AA000001000000000000005E /* HotkeyManager.swift */,
+				AA000001000000000000009C /* JournalWindow.swift */,
 				AA000001000000000000006F /* Info.plist */,
 				AA000001000000000000007A /* Otto.entitlements */,
 			);
@@ -154,6 +157,7 @@
 				AA000002000000000000003C /* WaveformView.swift in Sources */,
 				AA000002000000000000004D /* PythonBridge.swift in Sources */,
 				AA000002000000000000005E /* HotkeyManager.swift in Sources */,
+				AA000002000000000000009C /* JournalWindow.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
