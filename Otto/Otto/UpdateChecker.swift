@@ -57,6 +57,7 @@ final class UpdateChecker {
         do {
             var req = URLRequest(url: Self.latestURL)
             req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            req.setValue("Otto/\(currentVersion) (macOS)", forHTTPHeaderField: "User-Agent")
             let (data, _) = try await URLSession.shared.data(for: req)
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let tag = json["tag_name"] as? String else {
