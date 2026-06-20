@@ -33,64 +33,39 @@ struct CommandPalette: View {
     var onOpenJournal: () -> Void = {}
 
     @State private var inputText = ""
-    @State private var isHoldingMic = false
+    @State private var isListening = false
     @State private var selectedIndex: Int? = nil
     @FocusState private var textFieldFocused: Bool
 
+    /// Orb mode when nothing has been typed; bar mode as soon as text exists.
+    private var isOrbMode: Bool { inputText.isEmpty }
+
     var body: some View {
-        VStack(spacing: 0) {
-            inputRow
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-
-            if bridge.waveformActive || isHoldingMic {
-                WaveformView(level: bridge.micLevel, active: bridge.waveformActive)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 10)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
-
-            if let error = bridge.lastError {
-                errorRow(error)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 14)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            } else if !bridge.spokenText.isEmpty {
-                resultRow
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 14)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
-
-            if let learned = bridge.learnedEvent {
-                learnedChip(learned)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 14)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
-
-            if showSuggestions {
-                suggestionSection
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+        Group {
+            if isOrbMode {
+                orbModeView
+            } else {
+                barModeView
             }
         }
+        .animation(.spring(duration: 0.32, bounce: 0.12), value: isOrbMode)
         .animation(.spring(duration: 0.28, bounce: 0.08), value: bridge.waveformActive)
         .animation(.spring(duration: 0.28, bounce: 0.08), value: bridge.spokenText)
         .animation(.spring(duration: 0.28, bounce: 0.08), value: bridge.lastError)
         .animation(.spring(duration: 0.28, bounce: 0.08), value: bridge.learnedEvent)
         .animation(.spring(duration: 0.22, bounce: 0.05), value: showSuggestions)
-        .frame(width: 640)
         .background { paletteBackground }
         .shadow(color: .black.opacity(0.22), radius: 28, y: 10)
         .padding(1) // prevent shadow clipping
-        .onKeyPress(.escape) { onDismiss(); return .handled }
-        .onAppear { textFieldFocused = true }
+        .onKeyPress(.escape) { stopListening(); onDismiss(); return .handled }
+        .onAppear { textFieldFocused = true; startListeningIfEnabled() }
         .onReceive(NotificationCenter.default.publisher(for: .paletteDidShow)) { _ in
             inputText = ""
             selectedIndex = nil
             textFieldFocused = true
             bridge.requestJournal()
             bridge.requestSuggestions()
+            startListeningIfEnabled()
         }
         .onChange(of: inputText) { selectedIndex = nil }
         // Auto-clear a spoken result after it has lingered, so the palette
@@ -107,6 +82,65 @@ struct CommandPalette: View {
             guard !Task.isCancelled else { return }
             bridge.learnedEvent = nil
         }
+    }
+
+    // MARK: - Orb mode
+
+    private var orbModeView: some View {
+        ZStack {
+            CapabilityHalo(items: haloItems, orbDiameter: 140, onSelect: handleHalo)
+            OrbView(listening: isListening,
+                    level: bridge.micLevel,
+                    micEnabled: true,
+                    onTap: toggleListening)
+            // Invisible, focused field that captures the first keystroke to enter bar mode.
+            TextField("", text: $inputText)
+                .textFieldStyle(.plain)
+                .focused($textFieldFocused)
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .onSubmit { submitText() }
+        }
+        .padding(20)
+    }
+
+    // MARK: - Bar mode
+
+    private var barModeView: some View {
+        VStack(spacing: 0) {
+            inputRow
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+
+            if bridge.waveformActive || isListening {
+                WaveformView(level: bridge.micLevel, active: bridge.waveformActive)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 10)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+
+            if let error = bridge.lastError {
+                errorRow(error)
+                    .padding(.horizontal, 20).padding(.bottom, 14)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            } else if !bridge.spokenText.isEmpty {
+                resultRow
+                    .padding(.horizontal, 20).padding(.bottom, 14)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+
+            if let learned = bridge.learnedEvent {
+                learnedChip(learned)
+                    .padding(.horizontal, 20).padding(.bottom, 14)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+
+            if showSuggestions {
+                suggestionSection
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+        }
+        .frame(width: 640)
     }
 
     // MARK: - Input row
@@ -167,32 +201,19 @@ struct CommandPalette: View {
     // MARK: - Mic button (hold to talk)
 
     private var micButton: some View {
-        Image(systemName: isHoldingMic ? "waveform" : "mic.fill")
+        Image(systemName: isListening ? "waveform" : "mic.fill")
             .font(.system(size: 15, weight: .medium))
-            .foregroundStyle(isHoldingMic ? Color.white : Color.secondary)
+            .foregroundStyle(isListening ? Color.white : Color.secondary)
             .frame(width: 32, height: 32)
             .background(
                 Circle()
-                    .fill(isHoldingMic ? Color.accentColor : Color.secondary.opacity(0.14))
+                    .fill(isListening ? Color.accentColor : Color.secondary.opacity(0.14))
             )
-            .scaleEffect(isHoldingMic ? 1.12 : 1.0)
-            .animation(.spring(duration: 0.18, bounce: 0.3), value: isHoldingMic)
+            .scaleEffect(isListening ? 1.12 : 1.0)
+            .animation(.spring(duration: 0.18, bounce: 0.3), value: isListening)
             .contentShape(Circle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        guard !isHoldingMic else { return }
-                        isHoldingMic = true
-                        bridge.lastError = nil
-                        bridge.sendVoiceStart()
-                    }
-                    .onEnded { _ in
-                        guard isHoldingMic else { return }
-                        isHoldingMic = false
-                        bridge.sendVoiceStop()
-                    }
-            )
-            .help("Hold to talk")
+            .onTapGesture { toggleListening() }
+            .help(isListening ? "Tap to stop" : "Tap to talk")
     }
 
     // MARK: - Result row
@@ -297,6 +318,54 @@ struct CommandPalette: View {
         bridge.lastError = nil
         bridge.sendText(text)
         inputText = ""
+        stopListening()
+    }
+
+    private func startListeningIfEnabled() {
+        if SettingsStore.shared.micAutoStart && !isListening {
+            isListening = true
+            bridge.lastError = nil
+            bridge.sendVoiceStart()
+        }
+    }
+
+    private func toggleListening() {
+        isListening.toggle()
+        bridge.lastError = nil
+        if isListening { bridge.sendVoiceStart() } else { bridge.sendVoiceStop() }
+    }
+
+    private func stopListening() {
+        if isListening { isListening = false; bridge.sendVoiceStop() }
+    }
+
+    private func handleHalo(_ item: HaloItem) {
+        if item.isParameterized {
+            inputText = item.phrase
+            textFieldFocused = true
+        } else {
+            bridge.spokenText = ""
+            bridge.lastError = nil
+            bridge.sendText(item.phrase)
+        }
+    }
+
+    private var haloItems: [HaloItem] {
+        let recent = bridge.recentPhrases.prefix(2).map { rp in
+            HaloItem(id: "recent::\(rp.phrase)", label: rp.phrase,
+                     icon: "clock.arrow.circlepath", phrase: rp.phrase, isParameterized: false)
+        }
+        let recentSet = Set(bridge.recentPhrases.map { $0.phrase.lowercased() })
+        let caps = bridge.journalCards
+            .filter { !recentSet.contains($0.description.lowercased()) }
+            .sorted { $0.timesUsed != $1.timesUsed ? $0.timesUsed > $1.timesUsed : $0.confidence > $1.confidence }
+            .prefix(5 - recent.count)
+            .map { card in
+                HaloItem(id: "cap::\(card.id)", label: card.description,
+                         icon: Self.primitiveIcon(card.primitive), phrase: card.description,
+                         isParameterized: CapabilityKind.isParameterized(template: card.template))
+            }
+        return Array(recent) + Array(caps)
     }
 
     private func handleSelect(_ item: SuggestionItem) {
@@ -320,7 +389,7 @@ struct CommandPalette: View {
     // MARK: - Suggestions
 
     private var showSuggestions: Bool {
-        !bridge.waveformActive && !isHoldingMic &&
+        !bridge.waveformActive && !isListening &&
         bridge.spokenText.isEmpty && bridge.lastError == nil &&
         bridge.learnedEvent == nil && !suggestions.isEmpty
     }

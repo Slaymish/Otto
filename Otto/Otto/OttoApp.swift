@@ -13,17 +13,21 @@ struct OttoApp: App {
 }
 
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let bridge = PythonBridge()
+    let updateChecker = UpdateChecker()
     private var paletteController: PaletteController?
     private var journalController: JournalController?
     private var settingsController: SettingsController?
     private var menuBarController: MenuBarController?
     private var hotkeyManager: HotkeyManager?
+    private var journalHotkeyManager: HotkeyManager?
     private var pythonProcess: Process?
     private var stdoutPipe: Pipe?
     private var onboardingWindow: NSWindow?
+    private var updateTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("[Otto] app started")
@@ -72,7 +76,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startMainApp() {
         paletteController = PaletteController(bridge: bridge)
         journalController = JournalController(bridge: bridge)
-        settingsController = SettingsController(onSaved: { [weak self] in self?.restartPython() })
+        settingsController = SettingsController(updateChecker: updateChecker, onSaved: { [weak self] in
+            self?.restartHotkeys()
+            self?.restartPython()
+        })
 
         paletteController?.onOpenJournal = { [weak self] in self?.journalController?.show() }
 
@@ -84,10 +91,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.install()
         menuBarController = menuBar
 
-        hotkeyManager = HotkeyManager(onToggle: { [weak self] in
-            self?.paletteController?.toggle()
-        })
-        hotkeyManager?.register()
+        // Updates: badge the menu when one is found; install on click.
+        updateChecker.onUpdateFound = { [weak self] in
+            self?.menuBarController?.setUpdateAvailable(self?.updateChecker.availableUpdate?.version)
+        }
+        menuBar.onInstallUpdate = { [weak self] in
+            Task { await self?.updateChecker.downloadAndInstall() }
+        }
+        if resourcesHaveBackend {
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                await self?.updateChecker.checkForUpdates()
+                self?.scheduleDailyUpdateCheck()
+            }
+        }
+
+        registerHotkeys()
 
         launchPython()
     }
@@ -106,6 +125,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stdoutPipe?.fileHandleForReading.readabilityHandler = nil
         stdoutPipe = nil
         launchPython()
+    }
+
+    // MARK: - Hotkeys
+
+    private func registerHotkeys() {
+        let summon = SettingsStore.shared.summonHotkey
+        let journal = SettingsStore.shared.journalHotkey
+
+        let s = HotkeyManager(keyCode: summon.keyCode, modifiers: summon.carbonModifiers, id: 1,
+                              onToggle: { [weak self] in self?.paletteController?.toggle() })
+        s.register()
+        hotkeyManager = s
+
+        let j = HotkeyManager(keyCode: journal.keyCode, modifiers: journal.carbonModifiers, id: 2,
+                              onToggle: { [weak self] in self?.journalController?.show() })
+        j.register()
+        journalHotkeyManager = j
+    }
+
+    /// Re-register both global hotkeys after a settings change (no Python restart needed).
+    func restartHotkeys() {
+        hotkeyManager?.unregister()
+        journalHotkeyManager?.unregister()
+        registerHotkeys()
+    }
+
+    private func scheduleDailyUpdateCheck() {
+        updateTimer?.invalidate()
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 86_400, repeats: true) { [weak self] _ in
+            Task { await self?.updateChecker.checkForUpdates() }
+        }
     }
 
     // MARK: - Python subprocess
