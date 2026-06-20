@@ -15,6 +15,10 @@ Swift → Python messages:
   {"type": "voice_start"}
   {"type": "voice_stop"}
   {"type": "text_input", "text": "open spotify"}
+  {"type": "request_journal"}
+  {"type": "undo_learning", "id": "<capability-id>"}
+  {"type": "edit_capability", "id": "<capability-id>", "description": "...", "examples": [...]}
+  {"type": "delete_capability", "id": "<capability-id>"}
   {"type": "ping"}
 
 On startup the port is printed to stdout as:  IPC_PORT=<n>
@@ -34,6 +38,10 @@ class IPCServer:
         self.on_voice_start: Callable | None = None
         self.on_voice_stop: Callable | None = None
         self.on_text_input: Callable[[str], None] | None = None
+        self.on_request_journal: Callable | None = None
+        self.on_undo_learning: Callable[[str], None] | None = None
+        self.on_edit_capability: Callable[[str, "str | None", "list | None"], None] | None = None
+        self.on_delete_capability: Callable[[str], None] | None = None
 
     async def start(self) -> int:
         """Bind to a random localhost port, announce it, return the port number."""
@@ -90,4 +98,18 @@ class IPCServer:
             text = msg.get("text", "").strip()
             if text:
                 self.on_text_input(text)
+        elif t == "request_journal" and self.on_request_journal:
+            self.on_request_journal()
+        elif t == "undo_learning" and self.on_undo_learning:
+            cid = (msg.get("id") or "").strip()
+            if cid:
+                self.on_undo_learning(cid)
+        elif t == "edit_capability" and self.on_edit_capability:
+            cid = (msg.get("id") or "").strip()
+            if cid:
+                self.on_edit_capability(cid, msg.get("description"), msg.get("examples"))
+        elif t == "delete_capability" and self.on_delete_capability:
+            cid = (msg.get("id") or "").strip()
+            if cid:
+                self.on_delete_capability(cid)
         # "ping" → no-op (keepalive only)

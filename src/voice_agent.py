@@ -102,7 +102,7 @@ def _build_instructions() -> str:
     _hints = (" " + config.USER_HINTS.strip()) if config.USER_HINTS.strip() else ""
     _browser = config.WEB_BROWSER
     return (
-        f"You are the voice operating system for {_name}'s Mac.{_hints}\n"
+        f"You are Otto, the voice assistant for {_name}'s Mac.{_hints}\n"
         f"The default browser is {_browser}.\n"
         f"{_name} speaks a computer control command and you execute it.\n\n"
         "TOOLS:\n"
@@ -114,7 +114,7 @@ def _build_instructions() -> str:
         "CONTEXT: Before each response you receive RETRIEVED CAPABILITIES showing\n"
         "the most relevant known recipes. Use them as your exact template.\n\n"
         "RULES (follow strictly):\n"
-        "- This is a voice OS, not a chatbot. ONLY respond to computer control commands.\n"
+        "- This is Otto, a voice assistant for the Mac, not a chatbot. ONLY respond to computer control commands.\n"
         "- If the command matches a STRONG retrieved capability: execute it immediately.\n"
         "- If grounding is WEAK or the command is ambiguous: say 'I can only run Mac\n"
         f"  commands — what would you like me to do?' and stop.\n"
@@ -693,14 +693,14 @@ async def receive(ws):
 def _print_banner(mic_name: str) -> None:
     print("=" * 60)
     if WAKE_MODE:
-        print(f"  🎙  VOICE OS — WAKE WORD: say \u201c{WAKE_WORD}, \u2026\u201d")
+        print(f"  🎙  OTTO — WAKE WORD: say \u201c{WAKE_WORD}, \u2026\u201d")
         print("  e.g. \u201chey chat, open Spotify\u201d   \u00b7   anything without the")
         print("  wake word is ignored. Ctrl-C to quit.")
     elif HOTKEY_MODE:
-        print(f"  🎙  VOICE OS — HOLD-TO-TALK: hold [{HOTKEY_NAME}] anywhere")
+        print(f"  🎙  OTTO — HOLD-TO-TALK: hold [{HOTKEY_NAME}] anywhere")
         print("  hold the key, speak, release to send. Ctrl-C to quit.")
     else:
-        print("  🎙  VOICE OS — PUSH-TO-TALK (press ENTER to talk)")
+        print("  🎙  OTTO — PUSH-TO-TALK (press ENTER to talk)")
     print(f"  mic: {mic_name}   \u00b7   brain: {MODEL}   \u00b7   log: {EVENT_LOG}")
     print("=" * 60, flush=True)
     if WAKE_MODE:
@@ -783,6 +783,31 @@ async def main():
                         _ipc.on_voice_start = lambda: asyncio.create_task(_ipc_voice_start(ws))
                         _ipc.on_voice_stop = lambda: asyncio.create_task(_ipc_voice_stop(ws))
                         _ipc.on_text_input = lambda text: asyncio.create_task(_ipc_text_input(ws, text))
+
+                        import learning_store
+
+                        def _broadcast_journal():
+                            if _ipc:
+                                _ipc.broadcast(learning_store.journal_payload())
+
+                        def _refresh_index():
+                            if _cap_index is not None:
+                                try:
+                                    _cap_index.refresh()
+                                except Exception:  # noqa: BLE001
+                                    pass
+
+                        def _after_change(_ok=True):
+                            _refresh_index()
+                            _broadcast_journal()
+
+                        _ipc.on_request_journal = _broadcast_journal
+                        _ipc.on_undo_learning = lambda cid: _after_change(learning_store.undo(cid))
+                        _ipc.on_edit_capability = lambda cid, desc, ex: _after_change(
+                            learning_store.edit_capability(cid, desc, ex))
+                        _ipc.on_delete_capability = lambda cid: _after_change(
+                            learning_store.delete_capability(cid))
+
                         _ipc.broadcast({"type": "ready"})
                         print("\n— SwiftUI palette connected —", flush=True)
                     tasks = [asyncio.create_task(mic_pump(ws)),
