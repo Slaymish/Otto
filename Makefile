@@ -1,7 +1,8 @@
 # Build Otto.app using only Xcode Command Line Tools (no full Xcode needed).
 # Install CLT:  xcode-select --install
 #
-#   make app     — compile + bundle + sign → Otto/build/Otto.app
+#   make app     — compile + bundle resources + sign → Otto/build/Otto.app
+#   make pkg     — make app, then wrap as Otto/build/Otto.pkg installer
 #   make clean   — remove build output
 
 ARCH        := $(shell uname -m)
@@ -59,5 +60,24 @@ $(ICON_DST): $(ICON_SRC) | $(APP)/Contents/Resources
 $(APP)/Contents/MacOS $(APP)/Contents $(APP)/Contents/Resources:
 	mkdir -p "$@"
 
+# Copy the Python backend and read-only capabilities into the bundle.
+# Write-path data (user caps, embeddings, sessions) goes to ~/Library/Application Support/Otto
+# at runtime via OTTO_DATA_DIR; only the static files belong in the bundle.
+bundle-resources: | $(APP)/Contents/Resources
+	rm -rf "$(APP)/Contents/Resources/src" "$(APP)/Contents/Resources/memory"
+	cp -R src "$(APP)/Contents/Resources/src"
+	mkdir -p "$(APP)/Contents/Resources/memory"
+	cp memory/capabilities.json "$(APP)/Contents/Resources/memory/capabilities.json"
+	cp requirements.txt "$(APP)/Contents/Resources/requirements.txt"
+
+# Create an installer PKG that drops Otto.app into /Applications.
+# In CI, rename the output to Otto-<tag>.pkg before uploading.
+pkg: app
+	pkgbuild \
+	    --component "$(APP)" \
+	    --install-location /Applications \
+	    "Otto/build/Otto.pkg"
+	@echo "✓  Otto/build/Otto.pkg"
+
 clean:
-	rm -rf Otto/build/Otto.app
+	rm -rf Otto/build/

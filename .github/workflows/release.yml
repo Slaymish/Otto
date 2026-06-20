@@ -14,47 +14,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Otto.app
-        run: make app
-
-      - name: Package release
+      - name: Build Otto.app and package as PKG
         run: |
           TAG="${{ github.ref_name }}"
-          STAGING="release/Otto-${TAG}"
-          mkdir -p "${STAGING}"
-
-          # App bundle
-          cp -R Otto/build/Otto.app "${STAGING}/"
-
-          # Python backend (voice_agent.py walks up from the .app to find these)
-          cp -R src "${STAGING}/"
-          cp -R memory "${STAGING}/"
-          cp requirements.txt "${STAGING}/"
-          [ -f requirements-local.txt ] && cp requirements-local.txt "${STAGING}/"
-          cp run.sh "${STAGING}/"
-          cp README.md "${STAGING}/" 2>/dev/null || true
-
-          # Zip preserving symlinks and extended attributes
-          cd release
-          zip -r --symlinks "Otto-${TAG}.zip" "Otto-${TAG}"
+          make app
+          pkgbuild \
+            --component "Otto/build/Otto.app" \
+            --install-location /Applications \
+            "Otto/build/Otto-${TAG}.pkg"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: "Otto ${{ github.ref_name }}"
-          files: release/Otto-${{ github.ref_name }}.zip
+          files: Otto/build/Otto-${{ github.ref_name }}.pkg
           generate_release_notes: true
           body: |
             ## Install
 
-            1. Download and unzip `Otto-${{ github.ref_name }}.zip`
-            2. Move the extracted folder anywhere you like (e.g. `~/Applications/Otto/`)
-            3. Add your `OPENAI_API_KEY` to a `.env` file inside that folder
-            4. Double-click `Otto.app` — or run `./run.sh --app` from a terminal
+            1. Download `Otto-${{ github.ref_name }}.pkg` and double-click to run the installer
+            2. Otto.app is placed in `/Applications` automatically
+            3. Open Otto from Launchpad or Spotlight — the setup wizard guides you through entering your OpenAI API key
 
-            > **First launch:** macOS will block the app since it isn't notarized.
-            > Right-click → Open, then click Open in the dialog.
+            > **Gatekeeper notice:** Otto is not notarized. On first launch, right-click → Open in Finder, then click Open in the dialog.
 
             ## Requirements
-            - macOS 14+
-            - Python 3.10+ (for the voice backend — installed automatically by `run.sh`)
+            - macOS 14 (Sonoma) or later
+            - Python 3 (pre-installed on macOS)
+            - [OpenAI API key](https://platform.openai.com/api-keys)
+
+            ## What the installer does
+            - Places `Otto.app` in `/Applications` — no other files are written to your system
+            - On first launch Otto installs its Python dependencies (~30 MB) into `~/Library/Application Support/Otto/` — no system Python packages are modified
