@@ -55,6 +55,7 @@ $(BINARY): $(SOURCES) | $(APP)/Contents/MacOS
 	    -sdk "$(SDK)" \
 	    -target "$(TARGET)" \
 	    -framework Carbon \
+	    -framework ServiceManagement \
 	    $(SDK_FLAGS) \
 	    -O \
 	    -o "$@"

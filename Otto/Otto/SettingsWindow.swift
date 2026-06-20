@@ -121,6 +121,8 @@ struct SettingsView: View {
                 Toggle("Start listening when Otto opens", isOn: $store.micAutoStart)
                     .toggleStyle(.switch)
                     .padding(.top, 6)
+                Toggle("Launch at login", isOn: $store.launchAtLogin)
+                    .toggleStyle(.switch)
             }
             .padding(.top, 4)
         }

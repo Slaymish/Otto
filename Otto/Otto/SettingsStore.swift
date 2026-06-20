@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import ServiceManagement
 
 final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
@@ -13,6 +14,7 @@ final class SettingsStore: ObservableObject {
     @Published var summonHotkey: HotkeyConfig = .summonDefault
     @Published var journalHotkey: HotkeyConfig = .journalDefault
     @Published var micAutoStart: Bool = true
+    @Published var launchAtLogin: Bool = false
 
     var isConfigured: Bool {
         !openAIKey.isEmpty && UserDefaults.standard.bool(forKey: "otto.onboardingComplete")
@@ -28,6 +30,7 @@ final class SettingsStore: ObservableObject {
         summonHotkey  = Self.decodeHotkey("otto.summonHotkey")  ?? .summonDefault
         journalHotkey = Self.decodeHotkey("otto.journalHotkey") ?? .journalDefault
         micAutoStart  = UserDefaults.standard.object(forKey: "otto.micAutoStart") as? Bool ?? true
+        launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 
     func save() {
@@ -39,6 +42,19 @@ final class SettingsStore: ObservableObject {
         Self.encodeHotkey(journalHotkey, forKey: "otto.journalHotkey")
         UserDefaults.standard.set(micAutoStart, forKey: "otto.micAutoStart")
         UserDefaults.standard.set(true,        forKey: "otto.onboardingComplete")
+        applyLaunchAtLogin(launchAtLogin)
+    }
+
+    private func applyLaunchAtLogin(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            // SMAppService errors are non-fatal; state is reflected on next reload()
+        }
     }
 
     /// Env vars to inject into the Python subprocess.
