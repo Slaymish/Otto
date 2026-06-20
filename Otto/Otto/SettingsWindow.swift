@@ -118,6 +118,9 @@ struct SettingsView: View {
                 labeledField("Your name", placeholder: "e.g. Hamish", binding: $store.userName)
                 labeledField("Microphone", placeholder: "Partial name, e.g. Scarlett", binding: $store.micName)
                 labeledField("Browser", placeholder: "e.g. Chrome  (default: Safari)", binding: $store.browserName)
+                Toggle("Start listening when Otto opens", isOn: $store.micAutoStart)
+                    .toggleStyle(.switch)
+                    .padding(.top, 6)
             }
             .padding(.top, 4)
         }
